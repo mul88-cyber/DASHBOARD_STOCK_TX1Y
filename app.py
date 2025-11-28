@@ -25,7 +25,7 @@ st.set_page_config(
 )
 
 # --- KONFIGURASI G-DRIVE ---
-# Pastikan ID Folder & Nama File benar
+# Ganti dengan Folder ID dan Nama File yang sesuai
 FOLDER_ID = "1hX2jwUrAgi4Fr8xkcFWjCW6vbk6lsIlP" 
 FILE_NAME = "Kompilasi_Data_1Tahun.csv"
 
@@ -286,7 +286,7 @@ def calculate_mfv_top_stocks(df: pd.DataFrame, max_date: pd.Timestamp):
     return results.get('7D', pd.DataFrame()), results.get('30D', pd.DataFrame()), \
            results.get('90D', pd.DataFrame()), results.get('180D', pd.DataFrame())
 
-# --- FUNGSI BACKTESTING (BARU) ---
+# --- FUNGSI BACKTESTING (UPDATED: RETURN DATAFRAME FOR ALL SIGNALS) ---
 def run_backtest_analysis(df, days_back=90):
     """Simulasi logic Top 20 pada data masa lalu."""
     
@@ -557,11 +557,12 @@ with tab6:
             st.markdown("**Top Rasio Negatif (Outflow Konsisten)**")
             st.dataframe(df_day.sort_values('Money Flow Ratio (20D)', ascending=True).head(10)[['Stock Code', 'Close', 'Money Flow Ratio (20D)']], use_container_width=True, hide_index=True)
 
-# --- TAB 7: BACKTEST LOGIC (BARU & FIXED) ---
+# --- TAB 7: BACKTEST LOGIC (TRANSPARAN & FIXED) ---
 with tab7:
-    st.subheader("🧪 Backtest: Audit Performa Algoritma")
+    st.subheader("🧪 Backtest: Audit Performa Algoritma (Full Data)")
     st.markdown("""
-    **Logic:** Mundur ke masa lalu (sebanyak X hari), hitung Top 20 saat itu, lalu bandingkan harga entry saat itu dengan harga sekarang.
+    **Logic:** Mundur ke masa lalu, hitung Top 20 setiap hari, lalu cek return sampai hari ini.
+    Data ini **tidak difilter**, menampilkan seluruh sinyal untuk melihat Win Rate asli.
     """)
     
     col_bt1, col_bt2 = st.columns([1, 3])
@@ -570,48 +571,96 @@ with tab7:
         run_btn = st.button("🚀 Jalankan Backtest")
     
     if run_btn:
-        df_backtest = run_backtest_analysis(df, days_back=days_to_test)
+        with st.spinner("Sedang melakukan simulasi time-travel..."):
+            df_backtest = run_backtest_analysis(df, days_back=days_to_test)
         
         if not df_backtest.empty:
             st.success("Selesai!")
             
-            # KPI Utama
+            # --- 1. GLOBAL STATS (REAL WIN RATE) ---
+            total_signals = len(df_backtest)
             avg_ret = df_backtest['Return to Date (%)'].mean()
-            win_rate = (df_backtest['Return to Date (%)'] > 0).mean() * 100
+            win_count = len(df_backtest[df_backtest['Return to Date (%)'] > 0])
+            win_rate = (win_count / total_signals) * 100
             
-            k1, k2, k3 = st.columns(3)
-            k1.metric("Avg Return (Hold to Date)", f"{avg_ret:.2f}%")
-            k2.metric("Win Rate", f"{win_rate:.1f}%")
-            k3.metric("Total Sinyal", f"{len(df_backtest)}x")
+            st.markdown("### 📊 Performa Keseluruhan (Real Stats)")
+            k1, k2, k3, k4 = st.columns(4)
+            k1.metric("Total Sinyal Digenerate", f"{total_signals}x")
+            k2.metric("Win Rate (Real)", f"{win_rate:.1f}%", help="Persentase sinyal yang profit > 0% saat ini.")
+            k3.metric("Avg Return per Trade", f"{avg_ret:.2f}%", help="Rata-rata profit/loss jika beli semua sinyal.")
+            k4.metric("Ratio Win:Loss", f"{win_count}:{total_signals-win_count}")
             
             st.markdown("---")
+
+            # --- 2. ANALISIS BERDASARKAN FREKUENSI ---
+            st.subheader("🔍 Apakah Sering Muncul = Lebih Cuan?")
+            st.info("Tabel ini membedakan performa saham yang 'Konsisten Muncul' vs 'Cuma Lewat'.")
             
-            # Tabel Frekuensi
-            st.subheader("⭐ Saham Paling Sering Muncul di Top 20")
-            freq = df_backtest.groupby('Stock Code').agg(
+            # Grouping dulu
+            freq_analysis = df_backtest.groupby('Stock Code').agg(
+                Muncul_Berapa_Kali=('Signal Date', 'count'),
+                Rata2_Return=('Return to Date (%)', 'mean')
+            ).reset_index()
+            
+            # Kita kategorikan saham berdasarkan frekuensi munculnya
+            freq_analysis['Kategori'] = pd.cut(
+                freq_analysis['Muncul_Berapa_Kali'], 
+                bins=[0, 2, 5, 100], 
+                labels=['Jarang (1-2x)', 'Sedang (3-5x)', 'Sering (>5x)']
+            )
+            
+            # Hitung statistik per kategori
+            summary_by_freq = freq_analysis.groupby('Kategori', observed=False).agg(
+                Jumlah_Saham=('Stock Code', 'count'),
+                Avg_Return_Kategori=('Rata2_Return', 'mean')
+            ).reset_index()
+            
+            c_f1, c_f2 = st.columns(2)
+            with c_f1:
+                st.write("**Statistik per Kategori:**")
+                st.dataframe(summary_by_freq, use_container_width=True)
+            with c_f2:
+                # Visualisasi Bar Chart
+                fig_freq = px.bar(summary_by_freq, x='Kategori', y='Avg_Return_Kategori', 
+                                  title="Rata-rata Return Berdasarkan Kategori Frekuensi",
+                                  color='Avg_Return_Kategori', color_continuous_scale='RdYlGn')
+                st.plotly_chart(fig_freq, use_container_width=True)
+
+            st.markdown("---")
+            
+            # --- 3. TABEL DETAIL SEMUA SAHAM (TANPA LIMIT) ---
+            st.subheader("⭐ Detail Performa Saham (Diurutkan dari Paling Sering Muncul)")
+            
+            # Olah data untuk tabel detail
+            freq_detail = df_backtest.groupby('Stock Code').agg(
                 Freq=('Signal Date', 'count'),
                 Avg_Return=('Return to Date (%)', 'mean'),
                 Last_Price=('Current Price', 'last')
             ).reset_index().sort_values(['Freq', 'Avg_Return'], ascending=[False, False])
             
+            # TAMPILKAN SEMUA (Tanpa .head())
             st.dataframe(
-                freq.head(20),
+                freq_detail,
                 use_container_width=True,
                 hide_index=True,
                 column_config={
-                    # [FIXED] Tambahkan int() untuk konversi numpy.int64 ke python int
-                    "Freq": st.column_config.ProgressColumn("Frekuensi", format="%d x", max_value=int(freq['Freq'].max())),
-                    "Avg_Return": st.column_config.NumberColumn("Rata2 Return", format="%.2f %%")
+                    "Stock Code": "Kode Saham",
+                    # [FIXED] Tambahkan int() untuk konversi numpy.int64 ke python int agar JSON serialize aman
+                    "Freq": st.column_config.ProgressColumn("Frekuensi Muncul", format="%d x", max_value=int(freq_detail['Freq'].max())),
+                    "Avg_Return": st.column_config.NumberColumn("Rata2 Return", format="%.2f %%"),
+                    "Last_Price": st.column_config.NumberColumn("Harga Terakhir", format="Rp %d")
                 }
             )
             
-            # Scatter Plot
-            st.subheader("📍 Sebaran Performa Sinyal")
-            fig_bt = px.scatter(df_backtest, x="Signal Date", y="Return to Date (%)", color="Return to Date (%)",
-                                hover_data=["Stock Code", "Entry Price", "Current Price"],
-                                color_continuous_scale="RdYlGn", title="Tanggal Sinyal vs Profit Saat Ini")
-            fig_bt.add_hline(y=0, line_dash="dash", line_color="gray")
-            st.plotly_chart(fig_bt, use_container_width=True)
+            # --- 4. EXPORT DATA ---
+            st.markdown("### 📥 Download Data Mentah")
+            csv = df_backtest.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label="Download Full Backtest Log (CSV)",
+                data=csv,
+                file_name='full_backtest_log.csv',
+                mime='text/csv',
+            )
             
         else:
-            st.warning("Tidak ada data hasil backtest. Coba kurangi periode hari.")
+            st.warning("Tidak ada data hasil backtest. Coba kurangi periode hari atau pastikan data historis tersedia.")
