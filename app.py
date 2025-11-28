@@ -25,7 +25,7 @@ st.set_page_config(
 )
 
 # --- KONFIGURASI G-DRIVE ---
-# Ganti dengan Folder ID dan Nama File yang sesuai
+# Pastikan ID Folder & Nama File benar
 FOLDER_ID = "1hX2jwUrAgi4Fr8xkcFWjCW6vbk6lsIlP" 
 FILE_NAME = "Kompilasi_Data_1Tahun.csv"
 
@@ -144,7 +144,6 @@ def to_pct(s: pd.Series):
     return (s - mn) / (mx - mn) * 100
 
 # Fungsi Utama Perhitungan Skor
-# Tidak pakai @st.cache_data di sini agar bisa dipanggil berulang saat backtest
 def calculate_potential_score(df: pd.DataFrame, latest_date: pd.Timestamp):
     """Menjalankan logika scoring 'Raport' pada data cutoff tanggal tertentu."""
     trend_start = latest_date - pd.Timedelta(days=30)
@@ -491,12 +490,7 @@ with tab4:
     st.subheader("🏆 Top 20 Saham Potensial (Scoring Logic)")
     st.info("Ranking berdasarkan Trend (30D), Momentum (7D), NBSA, dan Foreign Contribution.")
     
-    # Hitung skor pakai cache_data wrapper yang sudah ada
-    # Tapi kita buat wrapper simple baru agar bisa dipanggil di sini
-    # Atau panggil langsung calculate_potential_score (tapi dia tidak dicache untuk backtest, jadi better panggil wrapper)
-    
-    # Supaya konsisten, kita panggil fungsi calculate_potential_score
-    # Tips: Untuk performa di Tab 4 ini saja, kita bisa wrap lagi dengan st.cache_data khusus view ini
+    # Wrapper cache khusus untuk tampilan Top 20 hari terpilih
     @st.cache_data(ttl=3600)
     def get_cached_top20(dframe, tgl):
         return calculate_potential_score(dframe, tgl)
@@ -563,7 +557,7 @@ with tab6:
             st.markdown("**Top Rasio Negatif (Outflow Konsisten)**")
             st.dataframe(df_day.sort_values('Money Flow Ratio (20D)', ascending=True).head(10)[['Stock Code', 'Close', 'Money Flow Ratio (20D)']], use_container_width=True, hide_index=True)
 
-# --- TAB 7: BACKTEST LOGIC (BARU) ---
+# --- TAB 7: BACKTEST LOGIC (BARU & FIXED) ---
 with tab7:
     st.subheader("🧪 Backtest: Audit Performa Algoritma")
     st.markdown("""
@@ -605,7 +599,8 @@ with tab7:
                 use_container_width=True,
                 hide_index=True,
                 column_config={
-                    "Freq": st.column_config.ProgressColumn("Frekuensi", format="%d x", max_value=freq['Freq'].max()),
+                    # [FIXED] Tambahkan int() untuk konversi numpy.int64 ke python int
+                    "Freq": st.column_config.ProgressColumn("Frekuensi", format="%d x", max_value=int(freq['Freq'].max())),
                     "Avg_Return": st.column_config.NumberColumn("Rata2 Return", format="%.2f %%")
                 }
             )
