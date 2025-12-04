@@ -130,7 +130,7 @@ def load_data():
         return pd.DataFrame(), msg, "error"
 
 # ==============================================================================
-# 🛠️ 4) FUNGSI KALKULASI SKOR & SIMULASI
+# 🛠️ 4) FUNGSI KALKULASI SKOR, BACKTEST & SIMULASI
 # ==============================================================================
 def pct_rank(s: pd.Series):
     s = pd.to_numeric(s, errors="coerce")
@@ -328,7 +328,7 @@ def run_backtest_analysis(df, days_back=90):
     status_text.empty()
     return pd.DataFrame(backtest_log)
 
-# --- FUNGSI SIMULASI PORTFOLIO (UPDATED: DATE RANGE) ---
+# --- FUNGSI SIMULASI PORTFOLIO (RANGE DATE) ---
 def simulate_portfolio_range(df, capital, start_date_ts, end_date_ts):
     """
     Simulasi:
@@ -546,19 +546,27 @@ with tab6:
         cr1.markdown("Top Rasio Positif"); cr1.dataframe(df_day.sort_values('Money Flow Ratio (20D)', ascending=False).head(10)[['Stock Code','Close','Money Flow Ratio (20D)']], hide_index=True, use_container_width=True)
         cr2.markdown("Top Rasio Negatif"); cr2.dataframe(df_day.sort_values('Money Flow Ratio (20D)', ascending=True).head(10)[['Stock Code','Close','Money Flow Ratio (20D)']], hide_index=True, use_container_width=True)
 
-# --- TAB 7: BACKTEST LOGIC (FULL) ---
+# --- TAB 7: BACKTEST LOGIC (FULL LEADERBOARD) ---
 with tab7:
     st.subheader("🧪 Backtest: Audit Performa Algoritma")
-    st.markdown("Audit sinyal mundur ke masa lalu untuk melihat Win Rate asli.")
+    st.markdown("""
+    **Logic:** Mundur ke masa lalu untuk mengecek performa sinyal.
+    Data ini menampilkan **Leaderboard Saham** (Ranking Frekuensi) dan **Detail Log Harian**.
+    """)
+    
     col_bt1, col_bt2 = st.columns([1, 3])
     with col_bt1:
         days_to_test = st.number_input("Hari Backtest", min_value=7, max_value=90, value=30, step=7)
         run_btn = st.button("🚀 Jalankan Audit")
+        
     if run_btn:
-        with st.spinner("Processing..."): df_backtest = run_backtest_analysis(df, days_back=days_to_test)
+        with st.spinner("Sedang melakukan simulasi time-travel..."):
+            df_backtest = run_backtest_analysis(df, days_back=days_to_test)
+            
         if not df_backtest.empty:
             st.success("Selesai!")
-            # Real stats from full data
+            
+            # 1. KPI GLOBAL
             total_signals = len(df_backtest)
             win_count = len(df_backtest[df_backtest['Return to Date (%)'] > 0])
             win_rate = (win_count / total_signals) * 100
@@ -569,26 +577,59 @@ with tab7:
             k3.metric("Avg Return", f"{df_backtest['Return to Date (%)'].mean():.2f}%")
             
             st.markdown("---")
-            st.subheader("Analisis Frekuensi")
-            freq = df_backtest.groupby('Stock Code').agg(Freq=('Signal Date','count'), Avg_Ret=('Return to Date (%)','mean')).reset_index()
-            freq['Kategori'] = pd.cut(freq['Freq'], bins=[0,2,5,100], labels=['Jarang','Sedang','Sering'])
-            sum_freq = freq.groupby('Kategori', observed=False).agg(Count=('Stock Code','count'), Avg_Ret=('Avg_Ret','mean')).reset_index()
+            
+            # 2. TABEL LEADERBOARD 
+            st.subheader("⭐ Leaderboard: Saham Paling Sering Muncul")
+            st.info("Daftar saham diurutkan dari yang paling 'Rajin Muncul' (Konsisten) ke yang paling jarang.")
+            
+            freq_leaderboard = df_backtest.groupby('Stock Code').agg(
+                Freq=('Signal Date', 'count'),
+                Avg_Return=('Return to Date (%)', 'mean'),
+                Last_Price=('Current Price', 'last')
+            ).reset_index().sort_values(['Freq', 'Avg_Return'], ascending=[False, False])
+            
+            st.dataframe(
+                freq_leaderboard,
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "Stock Code": "Kode Saham",
+                    "Freq": st.column_config.ProgressColumn("Frekuensi Muncul", format="%d x", max_value=int(freq_leaderboard['Freq'].max())),
+                    "Avg_Return": st.column_config.NumberColumn("Rata-rata Cuan", format="%.2f %%"),
+                    "Last_Price": st.column_config.NumberColumn("Harga Terakhir", format="Rp %.0f")
+                }
+            )
+            
+            st.markdown("---")
+
+            # 3. ANALISIS KATEGORI FREKUENSI
+            st.subheader("🔍 Analisis Kategori: Sering vs Jarang")
+            freq_leaderboard['Kategori'] = pd.cut(freq_leaderboard['Freq'], bins=[0,2,5,100], labels=['Jarang (1-2x)', 'Sedang (3-5x)', 'Sering (>5x)'])
+            sum_freq = freq_leaderboard.groupby('Kategori', observed=False).agg(
+                Jumlah_Saham=('Stock Code', 'count'),
+                Avg_Ret=('Avg_Return', 'mean')
+            ).reset_index()
             
             c1, c2 = st.columns(2)
             c1.dataframe(sum_freq, use_container_width=True)
-            c2.plotly_chart(px.bar(sum_freq, x='Kategori', y='Avg_Ret', title="Return by Frequency", color='Avg_Ret'), use_container_width=True)
+            c2.plotly_chart(px.bar(sum_freq, x='Kategori', y='Avg_Ret', title="Rata-rata Return per Kategori", color='Avg_Ret', color_continuous_scale='RdYlGn'), use_container_width=True)
             
-            st.subheader("Detail Sinyal")
-            st.dataframe(
-                df_backtest.sort_values('Signal Date', ascending=False), 
-                use_container_width=True,
-                column_config={
-                     "Entry Price": st.column_config.NumberColumn(format="Rp %.0f"),
-                     "Current Price": st.column_config.NumberColumn(format="Rp %.0f"),
-                     "Return to Date (%)": st.column_config.NumberColumn(format="%.2f %%")
-                }
-            )
-        else: st.warning("No data.")
+            st.markdown("---")
+            
+            # 4. DATA MENTAH (LOG HARIAN)
+            with st.expander("📂 Lihat Detail Log Harian (Raw Data)"):
+                st.dataframe(
+                    df_backtest.sort_values('Signal Date', ascending=False), 
+                    use_container_width=True,
+                    column_config={
+                        "Signal Date": st.column_config.DateColumn("Tanggal Sinyal", format="DD-MM-YYYY"),
+                        "Entry Price": st.column_config.NumberColumn(format="Rp %.0f"),
+                        "Current Price": st.column_config.NumberColumn(format="Rp %.0f"),
+                        "Return to Date (%)": st.column_config.NumberColumn(format="%.2f %%")
+                    }
+                )
+        else:
+            st.warning("Tidak ada data hasil backtest. Pastikan data historis tersedia.")
 
 # --- TAB 8: SIMULASI PORTFOLIO (FIXED LOGIC) ---
 with tab8:
