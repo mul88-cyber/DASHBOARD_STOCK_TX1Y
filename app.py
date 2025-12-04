@@ -328,54 +328,69 @@ def run_backtest_analysis(df, days_back=90):
     status_text.empty()
     return pd.DataFrame(backtest_log)
 
-# --- FUNGSI SIMULASI PORTFOLIO (BARU) ---
-def simulate_portfolio(df, capital, sim_date_ts):
-    """Simulasi beli Top 20 pada tanggal tertentu dengan bobot rata."""
-    top20, _, status = calculate_potential_score(df, sim_date_ts)
+# --- FUNGSI SIMULASI PORTFOLIO (UPDATED: DATE RANGE) ---
+def simulate_portfolio_range(df, capital, start_date_ts, end_date_ts):
+    """
+    Simulasi:
+    1. Beli Top 20 pada 'start_date' (Entry Price = Close pada Start Date).
+    2. Jual/Valuasi pada 'end_date' (Exit Price = Close pada End Date).
+    """
+    # 1. Generate Sinyal pada Tanggal Beli
+    top20, _, status = calculate_potential_score(df, start_date_ts)
     
     if status != "success" or top20.empty:
-        return pd.DataFrame(), None, "Gagal mendapatkan Top 20 pada tanggal tersebut."
+        return pd.DataFrame(), None, f"Gagal menghitung skor untuk tanggal beli {start_date_ts.strftime('%d-%m-%Y')}."
     
-    # Ambil harga terakhir di database
-    latest_date = df['Last Trading Date'].max()
-    latest_prices = df[df['Last Trading Date'] == latest_date].set_index('Stock Code')['Close']
+    # 2. Ambil Data Harga pada Tanggal Jual (End Date)
+    df_end = df[df['Last Trading Date'] == end_date_ts]
     
+    if df_end.empty:
+        return pd.DataFrame(), None, f"Tidak ada data harga untuk tanggal jual {end_date_ts.strftime('%d-%m-%Y')}."
+    
+    # Map harga jual berdasarkan Stock Code
+    exit_prices = df_end.set_index('Stock Code')['Close']
+    
+    # 3. Hitung Alokasi
     allocation_per_stock = capital / len(top20) # Equal weight
     
     portfolio_results = []
     
     for idx, row in top20.iterrows():
         code = row['Stock Code']
-        buy_price = row['last_price']
+        buy_price = row['last_price'] # Entry Price (Close Start Date)
         
-        # Current price lookup
-        curr_price = latest_prices.get(code, np.nan)
+        # Cari harga exit
+        exit_price = exit_prices.get(code, np.nan)
         
-        if pd.isna(curr_price) or buy_price <= 0:
+        # Logika PnL
+        if pd.isna(exit_price) or buy_price <= 0:
+            # Skenario: Saham delisting atau data hilang di tanggal jual
             roi_pct = 0
-            final_val = allocation_per_stock # Asumsi uang kembali kalau data error
+            final_val = allocation_per_stock 
             gain_rp = 0
+            exit_price_display = 0 
         else:
-            roi_pct = ((curr_price - buy_price) / buy_price)
+            roi_pct = ((exit_price - buy_price) / buy_price)
             final_val = allocation_per_stock * (1 + roi_pct)
             gain_rp = final_val - allocation_per_stock
+            exit_price_display = exit_price
             
         portfolio_results.append({
             'Stock Code': code,
+            'Sector': row['sector'],
             'Buy Price': buy_price,
-            'Current Price': curr_price,
-            'Allocation': allocation_per_stock,
-            'Final Value': final_val,
+            'Sell Price': exit_price_display,
             'Gain/Loss (Rp)': gain_rp,
-            'ROI (%)': roi_pct * 100,
-            'Sector': row['sector']
+            'Final Value': final_val,
+            'ROI (%)': roi_pct * 100
         })
         
     df_port = pd.DataFrame(portfolio_results)
     
+    # Rangkuman
     summary = {
-        'Start Date': sim_date_ts,
-        'End Date': latest_date,
+        'Start Date': start_date_ts,
+        'End Date': end_date_ts,
         'Initial Capital': capital,
         'Final Portfolio Value': df_port['Final Value'].sum(),
         'Net Profit': df_port['Gain/Loss (Rp)'].sum(),
@@ -439,7 +454,7 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
     "🌊 **Analisis NFF (Rp)**",
     "💰 **Analisis Money Flow**",
     "🧪 **Backtest Logic**",
-    "💼 **Simulasi Portfolio**" # <-- TAB BARU
+    "💼 **Simulasi Portfolio**"
 ])
 
 # --- TAB 1: DASHBOARD HARIAN ---
@@ -543,9 +558,15 @@ with tab7:
         with st.spinner("Processing..."): df_backtest = run_backtest_analysis(df, days_back=days_to_test)
         if not df_backtest.empty:
             st.success("Selesai!")
-            win_rate = (len(df_backtest[df_backtest['Return to Date (%)'] > 0]) / len(df_backtest)) * 100
+            # Real stats from full data
+            total_signals = len(df_backtest)
+            win_count = len(df_backtest[df_backtest['Return to Date (%)'] > 0])
+            win_rate = (win_count / total_signals) * 100
+            
             k1, k2, k3 = st.columns(3)
-            k1.metric("Total Sinyal", f"{len(df_backtest)}x"); k2.metric("Win Rate", f"{win_rate:.1f}%"); k3.metric("Avg Return", f"{df_backtest['Return to Date (%)'].mean():.2f}%")
+            k1.metric("Total Sinyal", f"{total_signals}x")
+            k2.metric("Real Win Rate", f"{win_rate:.1f}%")
+            k3.metric("Avg Return", f"{df_backtest['Return to Date (%)'].mean():.2f}%")
             
             st.markdown("---")
             st.subheader("Analisis Frekuensi")
@@ -558,96 +579,124 @@ with tab7:
             c2.plotly_chart(px.bar(sum_freq, x='Kategori', y='Avg_Ret', title="Return by Frequency", color='Avg_Ret'), use_container_width=True)
             
             st.subheader("Detail Sinyal")
-            st.dataframe(df_backtest.sort_values('Signal Date', ascending=False), use_container_width=True)
-        else: st.warning("No data.")
-
-# --- TAB 8: SIMULASI PORTFOLIO (BARU) ---
-with tab8:
-    st.subheader("💼 Simulasi Portfolio: Cuan Berapa?")
-    st.markdown("Pilih tanggal di masa lalu. Asumsikan kita beli Top 20 hari itu, hold sampai sekarang.")
-    
-    col_p1, col_p2, col_p3 = st.columns(3)
-    
-    # Cari tanggal valid untuk simulasi (minimal 7 hari ke belakang dari data terakhir)
-    valid_dates = sorted(df['Last Trading Date'].unique())
-    latest_avail = valid_dates[-1]
-    default_sim_idx = max(0, len(valid_dates) - 30) # Default 30 hari lalu
-    
-    with col_p1:
-        sim_date_input = st.selectbox(
-            "Pilih Tanggal Mulai Beli",
-            options=valid_dates[:-1], # Jangan pilih hari terakhir
-            index=default_sim_idx,
-            format_func=lambda x: pd.Timestamp(x).strftime('%d-%m-%Y')
-        )
-    with col_p2:
-        capital_input = st.number_input("Modal Awal (Rp)", min_value=1_000_000, value=20_000_000, step=1_000_000)
-    with col_p3:
-        st.write("") # Spacer
-        st.write("") # Spacer
-        calc_port_btn = st.button("💰 Hitung Profit/Loss")
-        
-    if calc_port_btn:
-        df_port, summary_port, msg_port = simulate_portfolio(df, capital_input, pd.Timestamp(sim_date_input))
-        
-        if msg_port == "success":
-            # 1. TAMPILAN KARTU RINGKASAN
-            st.success(f"Simulasi dari tanggal {pd.Timestamp(sim_date_input).strftime('%d-%m-%Y')} s/d {pd.Timestamp(summary_port['End Date']).strftime('%d-%m-%Y')}")
-            
-            m1, m2, m3, m4 = st.columns(4)
-            m1.metric("Modal Awal", f"Rp {summary_port['Initial Capital']:,.0f}")
-            
-            # Warna untuk profit/loss
-            delta_color = "normal"
-            if summary_port['Net Profit'] > 0: delta_color = "normal" # Streamlit auto green for positive delta
-            
-            m2.metric("Nilai Aset Sekarang", f"Rp {summary_port['Final Portfolio Value']:,.0f}")
-            m3.metric("Net Profit/Loss", f"Rp {summary_port['Net Profit']:,.0f}", delta=f"{summary_port['Total ROI']:.2f}%")
-            
-            # Menghitung saham untung vs rugi
-            win_stocks = len(df_port[df_port['Gain/Loss (Rp)'] > 0])
-            m4.metric("Saham Cuan / Rugi", f"{win_stocks} / {len(df_port) - win_stocks}")
-            
-            st.markdown("---")
-            
-            # 2. CHART KOMPOSISI PROFIT
-            c_chart1, c_chart2 = st.columns([2, 1])
-            
-            with c_chart1:
-                st.subheader("Kontribusi Profit per Saham")
-                # Bar chart sorted by Gain amount
-                df_port_sorted = df_port.sort_values('Gain/Loss (Rp)', ascending=False)
-                fig_port = px.bar(
-                    df_port_sorted, 
-                    x='Stock Code', 
-                    y='Gain/Loss (Rp)',
-                    color='Gain/Loss (Rp)',
-                    color_continuous_scale=['red', 'yellow', 'green'],
-                    text_auto='.2s',
-                    title="Siapa Pahlawan & Siapa Beban?"
-                )
-                fig_port.update_layout(xaxis_title="Kode Saham", yaxis_title="Profit/Loss (Rp)")
-                st.plotly_chart(fig_port, use_container_width=True)
-                
-            with c_chart2:
-                st.subheader("Distribusi Sektor")
-                fig_pie = px.pie(df_port, names='Sector', values='Allocation', title="Alokasi Sektor")
-                st.plotly_chart(fig_pie, use_container_width=True)
-            
-            # 3. TABEL DETAIL
-            st.subheader("Rincian Transaksi")
             st.dataframe(
-                df_port_sorted[['Stock Code', 'Sector', 'Buy Price', 'Current Price', 'ROI (%)', 'Gain/Loss (Rp)', 'Final Value']],
+                df_backtest.sort_values('Signal Date', ascending=False), 
                 use_container_width=True,
-                hide_index=True,
                 column_config={
-                    "Buy Price": st.column_config.NumberColumn("Harga Beli", format="Rp %.0f"),
-                    "Current Price": st.column_config.NumberColumn("Harga Jual", format="Rp %.0f"),
-                    "Gain/Loss (Rp)": st.column_config.NumberColumn("Cuan (Rp)", format="Rp %.0f"),
-                    "Final Value": st.column_config.NumberColumn("Nilai Aset", format="Rp %.0f"),
-                    "ROI (%)": st.column_config.NumberColumn("ROI %", format="%.2f %%")
+                     "Entry Price": st.column_config.NumberColumn(format="Rp %.0f"),
+                     "Current Price": st.column_config.NumberColumn(format="Rp %.0f"),
+                     "Return to Date (%)": st.column_config.NumberColumn(format="%.2f %%")
                 }
             )
-            
+        else: st.warning("No data.")
+
+# --- TAB 8: SIMULASI PORTFOLIO (FIXED LOGIC) ---
+with tab8:
+    st.subheader("💼 Simulasi Portfolio: Beli Tanggal X, Jual Tanggal Y")
+    st.markdown("""
+    **Skenario:** Kamu punya modal Rp 20 Juta. Kamu membelikan semuanya ke Top 20 saham pada **Tanggal Beli**, 
+    lalu kamu hold dan cek saldo pada **Tanggal Jual**.
+    """)
+    
+    # Ambil list tanggal yang tersedia di data
+    available_dates = sorted(df['Last Trading Date'].unique())
+    
+    col_p1, col_p2, col_p3, col_p4 = st.columns(4)
+    
+    with col_p1:
+        # Index default: 30 hari lalu dari data terakhir
+        idx_start = max(0, len(available_dates) - 31)
+        start_date_input = st.selectbox(
+            "📅 Tanggal Beli (Entry)",
+            options=available_dates,
+            index=idx_start,
+            format_func=lambda x: pd.Timestamp(x).strftime('%d-%m-%Y')
+        )
+        
+    with col_p2:
+        # Index default: Data terakhir
+        idx_end = len(available_dates) - 1
+        end_date_input = st.selectbox(
+            "📅 Tanggal Jual/Cek (Exit)",
+            options=available_dates,
+            index=idx_end,
+            format_func=lambda x: pd.Timestamp(x).strftime('%d-%m-%Y')
+        )
+        
+    with col_p3:
+        capital_input = st.number_input("💰 Modal Awal (Rp)", min_value=1_000_000, value=20_000_000, step=1_000_000)
+        
+    with col_p4:
+        st.write("") # Spacer
+        st.write("") 
+        calc_port_btn = st.button("🚀 Hitung Cuan")
+        
+    # Validasi Tanggal
+    ts_start = pd.Timestamp(start_date_input)
+    ts_end = pd.Timestamp(end_date_input)
+    
+    if calc_port_btn:
+        if ts_start >= ts_end:
+            st.error("⚠️ Logika Error: Tanggal Jual harus SETELAH Tanggal Beli.")
         else:
-            st.error(msg_port)
+            with st.spinner("Sedang menghitung valuasi aset..."):
+                df_port, summary_port, msg_port = simulate_portfolio_range(df, capital_input, ts_start, ts_end)
+            
+            if msg_port == "success":
+                # --- 1. SCORECARD ---
+                st.success(f"Periode Hold: {(ts_end - ts_start).days} Hari Kalender")
+                
+                m1, m2, m3, m4 = st.columns(4)
+                m1.metric("Modal Awal", f"Rp {summary_port['Initial Capital']:,.0f}")
+                m2.metric("Saldo Akhir", f"Rp {summary_port['Final Portfolio Value']:,.0f}")
+                
+                # Warna dinamis untuk profit
+                profit_val = summary_port['Net Profit']
+                m3.metric("Net Profit/Loss", f"Rp {profit_val:,.0f}", delta=f"{summary_port['Total ROI']:.2f}%")
+                
+                win_count = len(df_port[df_port['Gain/Loss (Rp)'] > 0])
+                m4.metric("Win/Loss Stocks", f"{win_count} vs {len(df_port) - win_count}")
+                
+                st.markdown("---")
+                
+                # --- 2. GRAFIK KINERJA ---
+                c_chart1, c_chart2 = st.columns([2, 1])
+                
+                with c_chart1:
+                    st.subheader("Siapa Penyumbang Cuan Terbesar?")
+                    df_port_sorted = df_port.sort_values('Gain/Loss (Rp)', ascending=False)
+                    
+                    # Bar chart dengan warna merah/hijau
+                    fig_port = px.bar(
+                        df_port_sorted, 
+                        x='Stock Code', 
+                        y='Gain/Loss (Rp)',
+                        color='Gain/Loss (Rp)',
+                        color_continuous_scale=['red', 'yellow', 'green'],
+                        text_auto='.2s',
+                        title=f"Gain/Loss per Saham (Hold {ts_start.strftime('%d/%m')} - {ts_end.strftime('%d/%m')})"
+                    )
+                    st.plotly_chart(fig_port, use_container_width=True)
+                    
+                with c_chart2:
+                    st.subheader("Komposisi Sector")
+                    fig_pie = px.pie(df_port, names='Sector', values='Final Value', title="Value Akhir per Sektor")
+                    st.plotly_chart(fig_pie, use_container_width=True)
+                
+                # --- 3. TABEL RINCIAN ---
+                st.subheader("🧾 Rincian Transaksi Portfolio")
+                st.dataframe(
+                    df_port_sorted[['Stock Code', 'Sector', 'Buy Price', 'Sell Price', 'ROI (%)', 'Gain/Loss (Rp)', 'Final Value']],
+                    use_container_width=True,
+                    hide_index=True,
+                    column_config={
+                        "Buy Price": st.column_config.NumberColumn(f"Beli ({ts_start.strftime('%d/%m')})", format="Rp %.0f"),
+                        "Sell Price": st.column_config.NumberColumn(f"Jual ({ts_end.strftime('%d/%m')})", format="Rp %.0f"),
+                        "Gain/Loss (Rp)": st.column_config.NumberColumn("Profit (Rp)", format="Rp %.0f"),
+                        "Final Value": st.column_config.NumberColumn("Total Aset", format="Rp %.0f"),
+                        "ROI (%)": st.column_config.NumberColumn("ROI", format="%.2f %%")
+                    }
+                )
+                
+            else:
+                st.error(msg_port)
