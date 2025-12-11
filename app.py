@@ -19,16 +19,16 @@ from googleapiclient.http import MediaIoBaseDownload
 # ⚙️ 2) KONFIGURASI DASHBOARD & G-DRIVE
 # ==============================================================================
 st.set_page_config(
-    page_title="📊 Dashboard Analisis Saham IDX + MSCI",
+    page_title="📊 Dashboard Saham IDX + MSCI Simulator",
     layout="wide",
     page_icon="📈"
 )
 
 # --- KONFIGURASI G-DRIVE ---
-FOLDER_ID = "1hX2jwUrAgi4Fr8xkcFWjCW6vbk6lsIlP"
+FOLDER_ID = "1hX2jwUrAgi4Fr8xkcFWjCW6vbk6lsIlP" 
 FILE_NAME = "Kompilasi_Data_1Tahun.csv"
 
-# Bobot skor (Original Logic)
+# Bobot skor (Logic "Raport")
 W = dict(
     trend_akum=0.40, trend_ff=0.30, trend_mfv=0.20, trend_mom=0.10,
     mom_price=0.40,  mom_vol=0.25,  mom_akum=0.25,  mom_ff=0.10,
@@ -45,7 +45,7 @@ def get_gdrive_service():
         service = build('drive', 'v3', credentials=creds, cache_discovery=False)
         return service, None
     except KeyError:
-        msg = "❌ Gagal otentikasi: 'st.secrets' tidak menemukan key [gcp_service_account]."
+        msg = "❌ Gagal otentikasi: 'st.secrets' tidak menemukan key [gcp_service_account]. Pastikan 'secrets.toml' sudah benar."
         return None, msg
     except Exception as e:
         msg = f"❌ Gagal otentikasi Google Drive: {e}."
@@ -83,7 +83,7 @@ def load_data():
         df.columns = df.columns.str.strip()
         df['Last Trading Date'] = pd.to_datetime(df['Last Trading Date'], errors='coerce')
 
-        # Daftar kolom numerik yang harus dibersihkan (Lengkap sesuai script awal)
+        # Daftar kolom numerik yang harus dibersihkan
         cols_to_numeric = [
             'High', 'Low', 'Close', 'Volume', 'Value', 'Foreign Buy', 'Foreign Sell',
             'Bid Volume', 'Offer Volume', 'Previous', 'Change', 'Open Price', 'First Trade',
@@ -128,7 +128,7 @@ def load_data():
         return pd.DataFrame(), msg, "error"
 
 # ==============================================================================
-# 🛠️ 4) FUNGSI KALKULASI UTAMA (CORE LOGIC)
+# 🛠️ 4) FUNGSI KALKULASI UTAMA
 # ==============================================================================
 def pct_rank(s: pd.Series):
     s = pd.to_numeric(s, errors="coerce")
@@ -301,32 +301,70 @@ def simulate_portfolio_range(df, capital, start_date_ts, end_date_ts):
 
 # --- FUNGSI MSCI SIMULATOR (TAB 9) ---
 @st.cache_data(ttl=3600)
-def calculate_msci_projection(df, latest_date):
-    """Menghitung metrik proxy MSCI: Float Market Cap & Liquidity (ATVR)."""
-    start_date_1y = latest_date - pd.Timedelta(days=365)
-    df_1y = df[(df['Last Trading Date'] >= start_date_1y) & (df['Last Trading Date'] <= latest_date)]
+def calculate_msci_projection_v2(df, latest_date, usd_rate):
+    """
+    Menghitung metrik proxy MSCI: 
+    1. Full & Float Market Cap (IDR & USD)
+    2. Liquidity (ATVR) 3-Month & 12-Month
+    """
+    # Define time windows
+    start_date_12m = latest_date - pd.Timedelta(days=365)
+    start_date_3m = latest_date - pd.Timedelta(days=90)
+    
+    # Filter data slices
+    df_12m = df[(df['Last Trading Date'] >= start_date_12m) & (df['Last Trading Date'] <= latest_date)]
+    df_3m = df[(df['Last Trading Date'] >= start_date_3m) & (df['Last Trading Date'] <= latest_date)]
     df_last = df[df['Last Trading Date'] == latest_date].copy()
+    
     results = []
     
     for idx, row in df_last.iterrows():
         code = row['Stock Code']; close = row['Close']
-        listed_shares = row.get('Listed Shares', 0); free_float_pct = row.get('Free Float', 0)
+        listed_shares = row.get('Listed Shares', 0)
+        free_float_pct = row.get('Free Float', 0)
         
-        # 1. Market Cap (Triliun)
-        full_mcap_t = (close * listed_shares) / 1e12
-        float_mcap_t = full_mcap_t * (free_float_pct / 100)
+        # --- 1. SIZE (Market Cap) ---
+        # IDR Base
+        full_mcap_idr_t = (close * listed_shares) / 1e12 # Triliun
+        float_mcap_idr_t = full_mcap_idr_t * (free_float_pct / 100)
         
-        # 2. Liquidity 1 Year
-        stock_trans = df_1y[df_1y['Stock Code'] == code]
-        total_value_1y = stock_trans['Value'].sum()
+        # USD Conversion (Billions)
+        full_mcap_usd_b = (full_mcap_idr_t * 1e12) / usd_rate / 1e9
+        float_mcap_usd_b = (float_mcap_idr_t * 1e12) / usd_rate / 1e9
         
-        # 3. ATVR Proxy
-        atvr_proxy = ((total_value_1y / 1e12) / float_mcap_t * 100) if float_mcap_t > 0 else 0
+        # --- 2. LIQUIDITY (ATVR) ---
+        # Total Value Transaksi (IDR)
+        val_12m = df_12m[df_12m['Stock Code'] == code]['Value'].sum()
+        val_3m = df_3m[df_3m['Stock Code'] == code]['Value'].sum()
+        
+        # Annualized Value
+        annualized_val_3m = val_3m * 4 # Simple annualization (3 bulan x 4)
+        
+        # Float Mcap (Current as proxy for average) -> Dalam Rupiah Penuh
+        float_mcap_full = float_mcap_idr_t * 1e12
+        
+        # ATVR Calculation (%)
+        atvr_12m = (val_12m / float_mcap_full * 100) if float_mcap_full > 0 else 0
+        atvr_3m = (annualized_val_3m / float_mcap_full * 100) if float_mcap_full > 0 else 0
             
-        results.append({'Stock Code': code, 'Close': close, 'Full Market Cap (T)': full_mcap_t, 'Float Market Cap (T)': float_mcap_t, 'ATVR (Liq Ratio)': atvr_proxy, 'Sector': row['Sector']})
+        results.append({
+            'Stock Code': code, 
+            'Close': close, 
+            'Sector': row['Sector'],
+            # IDR Metrics
+            'Float Cap (IDR T)': float_mcap_idr_t,
+            # USD Metrics
+            'Full Cap ($B)': full_mcap_usd_b,
+            'Float Cap ($B)': float_mcap_usd_b,
+            # Liquidity
+            'ATVR 12M (%)': atvr_12m,
+            'ATVR 3M (%)': atvr_3m
+        })
         
-    df_msci = pd.DataFrame(results).sort_values(by='Float Market Cap (T)', ascending=False).reset_index(drop=True)
-    df_msci['Rank (Float Cap)'] = df_msci.index + 1
+    df_msci = pd.DataFrame(results)
+    # Default Sort by USD Float Cap
+    df_msci = df_msci.sort_values(by='Float Cap ($B)', ascending=False).reset_index(drop=True)
+    df_msci['Rank'] = df_msci.index + 1
     return df_msci
 
 # ==============================================================================
@@ -487,35 +525,107 @@ with tab8:
                 st.dataframe(df_port[['Stock Code', 'Buy Price', 'Sell Price', 'Gain/Loss (Rp)', 'ROI (%)']], use_container_width=True, hide_index=True)
             else: st.error(msg)
 
-# --- TAB 9: MSCI SIMULATOR (NEW) ---
+# --- TAB 9: MSCI SIMULATOR (NEW - DUAL CURRENCY & ATVR) ---
 with tab9:
     st.subheader("🌏 MSCI Indonesia Index Simulator (Proxy)")
-    st.info("Prediksi kandidat MSCI berdasarkan **Size (Float Cap)** & **Liquidity (ATVR)**.")
+    st.info("Prediksi kandidat MSCI Standard Index. **Cutoff Estimasi:** Float Cap > $1.5 Billion, Liquidity (ATVR) > 15%.")
     
     if 'Listed Shares' not in df.columns: st.error("❌ Data 'Listed Shares' tidak ditemukan.")
     else:
-        df_msci = calculate_msci_projection(df, df['Last Trading Date'].max())
+        # Input Kurs & Parameter
+        c_p1, c_p2 = st.columns(2)
+        with c_p1: 
+            usd_idr = st.number_input("Kurs USD/IDR Saat Ini:", value=16500, step=50)
+        with c_p2:
+            st.write("")
+            st.caption(f"Estimasi $1 = Rp {usd_idr:,.0f}")
+
+        # Hitung Data
+        df_msci = calculate_msci_projection_v2(df, df['Last Trading Date'].max(), usd_idr)
         
-        c1, c2 = st.columns(2)
-        with c1: cut_cap = st.slider("Min. Float Cap (Triliun Rp)", 5.0, 50.0, 20.0, 0.5)
-        with c2: cut_atvr = st.slider("Min. Liquidity (ATVR %)", 5.0, 50.0, 15.0, 5.0)
-        
+        # Sliders Threshold (USD Base now)
+        st.markdown("##### 🎛️ Atur Kriteria Seleksi (USD)")
+        col_m1, col_m2, col_m3 = st.columns(3)
+        with col_m1:
+            cut_full_usd = st.number_input("Min. Full Market Cap ($ Billion)", value=3.0, step=0.1)
+        with col_m2:
+            cut_float_usd = st.number_input("Min. Float Market Cap ($ Billion)", value=1.5, step=0.1)
+        with col_m3:
+            cut_atvr = st.number_input("Min. Liquidity (ATVR % - 3M & 12M)", value=15.0, step=1.0)
+
+        # Categorization Logic
         def cat_msci(r):
-            if r['Float Market Cap (T)'] >= cut_cap and r['ATVR (Liq Ratio)'] >= cut_atvr: return "✅ Potential Standard"
-            elif r['Float Market Cap (T)'] >= cut_cap and r['ATVR (Liq Ratio)'] < cut_atvr: return "⚠️ Risk Deletion"
-            elif r['Float Market Cap (T)'] >= (cut_cap*0.3) and r['ATVR (Liq Ratio)'] >= cut_atvr: return "🔹 Small Cap"
-            return "🔻 Micro"
+            # Lolos Size?
+            pass_size = (r['Full Cap ($B)'] >= cut_full_usd) and (r['Float Cap ($B)'] >= cut_float_usd)
+            # Lolos Liquidity? (Strict: Both > 15%)
+            pass_liq = (r['ATVR 12M (%)'] >= cut_atvr) and (r['ATVR 3M (%)'] >= cut_atvr)
+            
+            if pass_size and pass_liq: return "✅ Potential Standard"
+            elif pass_size and not pass_liq: return "⚠️ Risk Deletion (Illiquid)"
+            elif (r['Float Cap ($B)'] >= (cut_float_usd * 0.5)) and pass_liq: return "🔹 Small Cap Potential"
+            return "🔻 Micro / Others"
         
         df_msci['Status'] = df_msci.apply(cat_msci, axis=1)
         
-        st.markdown("### 🎯 MSCI Proxy Map")
-        fig_msci = px.scatter(df_msci.head(100), x="ATVR (Liq Ratio)", y="Float Market Cap (T)", color="Status", size="Full Market Cap (T)", hover_data=['Stock Code'], text="Stock Code", color_discrete_map={"✅ Potential Standard": "green", "⚠️ Risk Deletion": "red", "🔹 Small Cap": "blue", "🔻 Micro": "gray"})
-        fig_msci.add_hline(y=cut_cap, line_dash="dash"); fig_msci.add_vline(x=cut_atvr, line_dash="dash")
+        # --- VISUALISASI ---
+        st.markdown("### 🎯 MSCI Proxy Map (USD Basis)")
+        
+        # Ambil Top 100 biar chart ga berat
+        df_chart = df_msci.head(100)
+        
+        fig_msci = px.scatter(
+            df_chart, 
+            x="ATVR 12M (%)", 
+            y="Float Cap ($B)", 
+            color="Status", 
+            size="Full Cap ($B)", 
+            hover_data=['Stock Code', 'ATVR 3M (%)'], 
+            text="Stock Code", 
+            color_discrete_map={
+                "✅ Potential Standard": "green", 
+                "⚠️ Risk Deletion (Illiquid)": "red", 
+                "🔹 Small Cap Potential": "blue", 
+                "🔻 Micro / Others": "gray"
+            },
+            title="Peta Kekuatan: Liquidity vs Float Size ($B)"
+        )
+        fig_msci.add_hline(y=cut_float_usd, line_dash="dash", annotation_text=f"Min Float ${cut_float_usd}B")
+        fig_msci.add_vline(x=cut_atvr, line_dash="dash", annotation_text=f"Min Liq {cut_atvr}%")
         st.plotly_chart(fig_msci, use_container_width=True)
         
-        c_t1, c_t2 = st.columns(2)
-        with c_t1: st.markdown("#### ✅ Top Candidates"); st.dataframe(df_msci[df_msci['Status']=="✅ Potential Standard"][['Rank (Float Cap)','Stock Code','Float Market Cap (T)','ATVR (Liq Ratio)']], hide_index=True, use_container_width=True)
-        with c_t2: st.markdown("#### ⚠️ Risk List"); st.dataframe(df_msci[df_msci['Status']=="⚠️ Risk Deletion"][['Rank (Float Cap)','Stock Code','Float Market Cap (T)','ATVR (Liq Ratio)']], hide_index=True, use_container_width=True)
+        # --- TABEL HASIL ---
+        col_t1, col_t2 = st.columns(2)
         
-        with st.expander("Lihat Semua Data"):
+        # Kolom yang mau ditampilkan
+        show_cols = ['Rank', 'Stock Code', 'Status', 'Float Cap ($B)', 'Full Cap ($B)', 'Float Cap (IDR T)', 'ATVR 3M (%)', 'ATVR 12M (%)']
+        
+        with col_t1: 
+            st.markdown("#### ✅ Top Candidates (Standard Index)")
+            st.dataframe(
+                df_msci[df_msci['Status']=="✅ Potential Standard"][show_cols], 
+                hide_index=True, use_container_width=True,
+                column_config={
+                    "Float Cap ($B)": st.column_config.NumberColumn(format="$ %.2f B"),
+                    "Full Cap ($B)": st.column_config.NumberColumn(format="$ %.2f B"),
+                    "Float Cap (IDR T)": st.column_config.NumberColumn(format="Rp %.1f T"),
+                    "ATVR 3M (%)": st.column_config.NumberColumn(format="%.1f %%"),
+                    "ATVR 12M (%)": st.column_config.NumberColumn(format="%.1f %%")
+                }
+            )
+            
+        with col_t2: 
+            st.markdown("#### ⚠️ Watchlist: Illiquid / Risk")
+            st.dataframe(
+                df_msci[df_msci['Status']=="⚠️ Risk Deletion (Illiquid)"][show_cols], 
+                hide_index=True, use_container_width=True,
+                column_config={
+                    "Float Cap ($B)": st.column_config.NumberColumn(format="$ %.2f B"),
+                    "Full Cap ($B)": st.column_config.NumberColumn(format="$ %.2f B"),
+                    "Float Cap (IDR T)": st.column_config.NumberColumn(format="Rp %.1f T"),
+                    "ATVR 3M (%)": st.column_config.NumberColumn(format="%.1f %%"),
+                    "ATVR 12M (%)": st.column_config.NumberColumn(format="%.1f %%")
+                }
+            )
+        
+        with st.expander("Lihat Semua Data (Raw)"):
              st.dataframe(df_msci, use_container_width=True)
