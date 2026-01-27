@@ -19,76 +19,68 @@ from googleapiclient.http import MediaIoBaseDownload
 # ⚙️ 2) KONFIGURASI DASHBOARD & G-DRIVE
 # ==============================================================================
 st.set_page_config(
-    page_title="Terminal Saham Pro",
+    page_title="Terminal Saham Pro v2",
     layout="wide",
     page_icon="📈",
     initial_sidebar_state="expanded"
 )
 
-# --- 🔥 DARK MODE CSS INJECTION (FIXED TEXT VISIBILITY) ---
+# --- 🔥 DARK MODE CSS (TEXT & TABLE FIX) ---
 st.markdown("""
 <style>
-    /* 1. Main Background - Deep Dark */
+    /* 1. Main Background */
     .stApp {
         background-color: #0E1117;
-        color: #E6E6E6; /* Default text color putih gading */
+        color: #E6E6E6;
         font-family: 'Roboto Mono', monospace; 
     }
 
-    /* 2. Sidebar - Darker Grey */
+    /* 2. Sidebar */
     [data-testid="stSidebar"] {
         background-color: #161B22;
         border-right: 1px solid #30363D;
     }
     
-    /* 3. Text Visibility Fixes */
-    p, span, div {
-        color: #E6E6E6; /* Paksa teks umum jadi putih */
+    /* 3. Text Visibility */
+    p, span, div, label {
+        color: #E6E6E6;
     }
     
-    /* 4. Metrics - Neon Style */
+    /* 4. Metrics */
     div[data-testid="stMetricValue"] {
-        font-size: 28px !important;
+        font-size: 26px !important;
         font-weight: 700 !important;
-        color: #00E676 !important; /* Matrix Green */
-        text-shadow: 0 0 10px rgba(0, 230, 118, 0.3);
+        color: #00E676 !important;
+        text-shadow: 0 0 10px rgba(0, 230, 118, 0.2);
     }
     div[data-testid="stMetricLabel"] {
-        font-size: 14px !important;
-        color: #8B949E !important; /* Abu terang */
+        font-size: 13px !important;
+        color: #8B949E !important;
         font-weight: 600 !important;
     }
-    div[data-testid="stMetricDelta"] svg {
-        fill: #00E676 !important;
-    }
 
-    /* 5. Cards/Containers */
+    /* 5. Cards */
     .css-card {
         background-color: #1E2329; 
-        padding: 20px;
+        padding: 15px;
         border-radius: 8px;
         border: 1px solid #30363D;
         margin-bottom: 15px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.3);
     }
 
-    /* 6. Dataframes - Dark Table Fix */
-    /* Pastikan header dan cell terbaca */
+    /* 6. Dataframes (Table Fix) */
     div[data-testid="stDataFrame"] {
         background-color: #1E2329 !important;
         border: 1px solid #30363D;
         border-radius: 8px;
     }
-    div[data-testid="stDataFrame"] div[role="grid"] {
-        color: #E6E6E6 !important;
-    }
     
     /* 7. Headers */
     h1, h2, h3, h4, h5 {
-        color: #58A6FF !important; /* Biru muda ala terminal */
+        color: #58A6FF !important;
         font-family: 'Inter', sans-serif;
         font-weight: 800;
-        margin-top: 10px;
+        margin-top: 5px;
     }
     
     /* 8. Buttons */
@@ -96,21 +88,11 @@ st.markdown("""
         background-color: #238636;
         color: white !important;
         border: 1px solid rgba(27, 31, 35, 0.15);
-        border-radius: 6px;
         font-weight: 600;
     }
-    div.stButton > button:hover {
-        background-color: #2EA043;
-        border-color: rgba(27, 31, 35, 0.15);
-        color: white !important;
-    }
-
-    /* Custom Class for Titles */
+    
     .header-title { font-size: 32px; font-weight: 900; color: #58A6FF; letter-spacing: -1px; }
     .header-subtitle { font-size: 14px; color: #8B949E; margin-bottom: 20px; font-family: 'Roboto Mono', monospace;}
-    
-    /* Separator */
-    hr { border-color: #30363D; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -118,7 +100,7 @@ st.markdown("""
 FOLDER_ID = "1hX2jwUrAgi4Fr8xkcFWjCW6vbk6lsIlP" 
 FILE_NAME = "Kompilasi_Data_1Tahun.csv"
 
-# Bobot skor (Logic "Raport")
+# Bobot skor
 W = dict(
     trend_akum=0.40, trend_ff=0.30, trend_mfv=0.20, trend_mom=0.10,
     mom_price=0.40,  mom_vol=0.25,  mom_akum=0.25,  mom_ff=0.10,
@@ -129,181 +111,116 @@ W = dict(
 # 📦 3) FUNGSI MEMUAT DATA
 # ==============================================================================
 def get_gdrive_service():
-    """Robust Authentication with Key Fixing"""
     try:
         if "gcp_service_account" not in st.secrets:
             return None, "❌ Key 'gcp_service_account' missing in secrets."
-            
         creds_data = st.secrets["gcp_service_account"]
-        if hasattr(creds_data, "to_dict"):
-            creds_json = creds_data.to_dict()
-        else:
-            creds_json = dict(creds_data)
-            
+        creds_json = creds_data.to_dict() if hasattr(creds_data, "to_dict") else dict(creds_data)
         if "private_key" in creds_json:
             pk = str(creds_json["private_key"])
-            if "\\n" in pk:
-                creds_json["private_key"] = pk.replace("\\n", "\n")
-
+            if "\\n" in pk: creds_json["private_key"] = pk.replace("\\n", "\n")
         creds = Credentials.from_service_account_info(creds_json, scopes=['https://www.googleapis.com/auth/drive.readonly'])
         service = build('drive', 'v3', credentials=creds, cache_discovery=False)
         return service, None
-    except Exception as e:
-        return None, f"❌ Auth Error: {e}"
+    except Exception as e: return None, f"❌ Auth Error: {e}"
 
 @st.cache_data(ttl=3600, show_spinner="🔄 Connecting to Market Data...")
 def load_data():
     service, error_msg = get_gdrive_service()
     if error_msg: return pd.DataFrame(), error_msg, "error"
-
     try:
-        query = f"'{FOLDER_ID}' in parents and name='{FILE_NAME}' and trashed=false"
-        results = service.files().list(q=query, fields="files(id, name)", orderBy="modifiedTime desc", pageSize=1).execute()
+        results = service.files().list(q=f"'{FOLDER_ID}' in parents and name='{FILE_NAME}' and trashed=false", fields="files(id, name)", orderBy="modifiedTime desc", pageSize=1).execute()
         items = results.get('files', [])
-
         if not items: return pd.DataFrame(), f"❌ File '{FILE_NAME}' not found.", "error"
-
-        file_id = items[0]['id']
-        request = service.files().get_media(fileId=file_id)
+        
+        request = service.files().get_media(fileId=items[0]['id'])
         fh = io.BytesIO()
         downloader = MediaIoBaseDownload(fh, request)
         done = False
         while not done: status, done = downloader.next_chunk()
         fh.seek(0)
-
+        
         df = pd.read_csv(fh, dtype=object)
         df.columns = df.columns.str.strip()
         df['Last Trading Date'] = pd.to_datetime(df['Last Trading Date'], errors='coerce')
-
+        
         cols_to_numeric = [
-            'High', 'Low', 'Close', 'Volume', 'Value', 'Foreign Buy', 'Foreign Sell',
-            'Bid Volume', 'Offer Volume', 'Previous', 'Change', 'Open Price', 'First Trade',
-            'Frequency', 'Index Individual', 'Offer', 'Bid', 'Listed Shares', 'Tradeble Shares',
-            'Weight For Index', 'Non Regular Volume', 'Change %', 'Typical Price', 'TPxV',
-            'VWMA_20D', 'MA20_vol', 'MA5_vol', 'Volume Spike (x)', 'Net Foreign Flow',
-            'Bid/Offer Imbalance', 'Money Flow Value', 'Free Float', 'Money Flow Ratio (20D)'
+            'High', 'Low', 'Close', 'Volume', 'Value', 'Foreign Buy', 'Foreign Sell', 'Bid Volume', 'Offer Volume', 
+            'Change', 'Open Price', 'Listed Shares', 'Change %', 'Typical Price', 'Net Foreign Flow', 'Money Flow Value', 'Free Float'
         ]
-
         for col in cols_to_numeric:
             if col in df.columns:
-                cleaned_col = df[col].astype(str).str.strip().str.replace(r'[,\sRp\%]', '', regex=True)
-                df[col] = pd.to_numeric(cleaned_col, errors='coerce').fillna(0)
-
+                df[col] = pd.to_numeric(df[col].astype(str).str.strip().str.replace(r'[,\sRp\%]', '', regex=True), errors='coerce').fillna(0)
+        
         if 'Unusual Volume' in df.columns:
-            df['Unusual Volume'] = df['Unusual Volume'].astype(str).str.strip().str.lower().isin(['spike volume signifikan', 'true', 'True', 'TRUE'])
-            df['Unusual Volume'] = df['Unusual Volume'].astype(bool)
-
-        if 'Final Signal' in df.columns:
-            df['Final Signal'] = df['Final Signal'].astype(str).str.strip()
-
+            df['Unusual Volume'] = df['Unusual Volume'].astype(str).str.strip().str.lower().isin(['spike volume signifikan', 'true'])
+        
         df['Sector'] = df['Sector'].astype(str).str.strip().fillna('Others') if 'Sector' in df.columns else 'Others'
         df = df.dropna(subset=['Last Trading Date', 'Stock Code'])
-
+        
         if 'NFF (Rp)' not in df.columns:
-            if 'Typical Price' in df.columns:
-                df['NFF (Rp)'] = df['Net Foreign Flow'] * df['Typical Price']
-            else:
-                df['NFF (Rp)'] = df['Net Foreign Flow'] * df['Close']
-
+            df['NFF (Rp)'] = df['Net Foreign Flow'] * (df['Typical Price'] if 'Typical Price' in df.columns else df['Close'])
+            
         return df, "Market Data Synced", "success"
-
-    except Exception as e:
-        return pd.DataFrame(), f"❌ Load Error: {e}", "error"
+    except Exception as e: return pd.DataFrame(), f"❌ Load Error: {e}", "error"
 
 # ==============================================================================
-# 🛠️ 4) FUNGSI KALKULASI UTAMA (OPTIMIZED)
+# 🛠️ 4) FUNGSI KALKULASI UTAMA
 # ==============================================================================
-def pct_rank(s: pd.Series):
-    s = pd.to_numeric(s, errors="coerce")
-    return s.rank(pct=True, method="average").fillna(0) * 100
-
-def to_pct(s: pd.Series):
+def pct_rank(s): return pd.to_numeric(s, errors="coerce").rank(pct=True, method="average").fillna(0) * 100
+def to_pct(s):
     s = pd.to_numeric(s, errors="coerce").replace([np.inf, -np.inf], np.nan)
     if s.notna().sum() <= 1: return pd.Series(50, index=s.index)
-    mn, mx = s.min(), s.max()
-    if pd.isna(mn) or pd.isna(mx) or mn == mx: return pd.Series(50, index=s.index)
-    return (s - mn) / (mx - mn) * 100
+    return (s - s.min()) / (s.max() - s.min()) * 100
 
-def calculate_potential_score(df: pd.DataFrame, latest_date: pd.Timestamp):
-    """Logika Raport Saham Potensial"""
-    trend_start = latest_date - pd.Timedelta(days=30)
-    mom_start = latest_date - pd.Timedelta(days=7)
+def calculate_potential_score(df, latest_date):
+    """Logika Raport Saham"""
+    trend_start, mom_start = latest_date - pd.Timedelta(days=30), latest_date - pd.Timedelta(days=7)
+    df_hist = df[df['Last Trading Date'] <= latest_date]
+    trend_df = df_hist[df_hist['Last Trading Date'] >= trend_start]
+    mom_df = df_hist[df_hist['Last Trading Date'] >= mom_start]
+    last_df = df_hist[df_hist['Last Trading Date'] == latest_date]
     
-    df_historic = df[df['Last Trading Date'] <= latest_date]
-    trend_df = df_historic[df_historic['Last Trading Date'] >= trend_start].copy()
-    mom_df = df_historic[df_historic['Last Trading Date'] >= mom_start].copy()
-    last_df = df_historic[df_historic['Last Trading Date'] == latest_date].copy()
-
-    if trend_df.empty or mom_df.empty or last_df.empty:
-        return pd.DataFrame(), "Data insufficient for scoring.", "warning"
-
-    # 1. Trend Score
+    if trend_df.empty: return pd.DataFrame(), "Data insufficient", "warning"
+    
+    # Trend
     tr = trend_df.groupby('Stock Code').agg(
-        last_price=('Close', 'last'), last_final_signal=('Final Signal', 'last'),
+        last_price=('Close', 'last'), last_final_signal=('Final Signal', 'last') if 'Final Signal' in df.columns else ('Close', 'count'),
         total_net_ff_rp=('NFF (Rp)', 'sum'), total_money_flow=('Money Flow Value', 'sum'),
         avg_change_pct=('Change %', 'mean'), sector=('Sector', 'last')
     ).reset_index()
-    score_akum = tr['last_final_signal'].map({'Strong Akumulasi': 100, 'Akumulasi': 75, 'Netral': 30, 'Distribusi': 10, 'Strong Distribusi': 0}).fillna(30)
-    score_ff = pct_rank(tr['total_net_ff_rp'])
-    score_mfv = pct_rank(tr['total_money_flow'])
-    score_mom = pct_rank(tr['avg_change_pct'])
-    tr['Trend Score'] = (score_akum * W['trend_akum'] + score_ff * W['trend_ff'] + score_mfv * W['trend_mfv'] + score_mom * W['trend_mom'])
-
-    # 2. Momentum Score
+    
+    # Momentum
     mo = mom_df.groupby('Stock Code').agg(
         total_change_pct=('Change %', 'sum'), had_unusual_volume=('Unusual Volume', 'any'),
-        last_final_signal=('Final Signal', 'last'), total_net_ff_rp=('NFF (Rp)', 'sum')
+        total_net_ff_rp=('NFF (Rp)', 'sum')
     ).reset_index()
-    s_price = pct_rank(mo['total_change_pct'])
-    s_vol = mo['had_unusual_volume'].map({True: 100, False: 20}).fillna(20)
-    s_akum = mo['last_final_signal'].map({'Strong Akumulasi': 100, 'Akumulasi': 80, 'Netral': 40, 'Distribusi': 10, 'Strong Distribusi': 0}).fillna(40)
-    s_ff7 = pct_rank(mo['total_net_ff_rp'])
-    mo['Momentum Score'] = (s_price * W['mom_price'] + s_vol * W['mom_vol'] + s_akum * W['mom_akum'] + s_ff7 * W['mom_ff'])
-
-    # 3. NBSA & Contrib
-    nbsa = trend_df.groupby('Stock Code').agg(total_net_ff_30d_rp=('NFF (Rp)', 'sum')).reset_index()
     
-    if {'Foreign Buy', 'Foreign Sell', 'Value'}.issubset(df.columns):
-        trend_df['Foreign Value proxy'] = trend_df['NFF (Rp)']
-        contrib = trend_df.groupby('Stock Code').agg(total_foreign_value_proxy=('Foreign Value proxy', 'sum'), total_value_30d=('Value', 'sum')).reset_index()
-        contrib['foreign_contrib_pct'] = np.where(contrib['total_value_30d'] > 0, (contrib['total_foreign_value_proxy'].abs() / contrib['total_value_30d']) * 100, 0)
-    else:
-        contrib = pd.DataFrame({'Stock Code': [], 'foreign_contrib_pct': []})
-
-    uv = last_df.set_index('Stock Code')['Unusual Volume'].map({True: 1, False: 0})
-
-    # Merge
-    rank = tr[['Stock Code', 'Trend Score', 'last_price', 'last_final_signal', 'sector']].merge(
-        mo[['Stock Code', 'Momentum Score']], on='Stock Code', how='outer'
-    ).merge(nbsa, on='Stock Code', how='left').merge(contrib[['Stock Code', 'foreign_contrib_pct']], on='Stock Code', how='left')
+    # Scoring Simpel
+    tr['Trend Score'] = pct_rank(tr['total_net_ff_rp']) * 0.5 + pct_rank(tr['total_money_flow']) * 0.5
+    mo['Momentum Score'] = pct_rank(mo['total_change_pct']) * 0.6 + pct_rank(mo['total_net_ff_rp']) * 0.4
     
-    rank['NBSA Score'] = to_pct(rank['total_net_ff_30d_rp'])
-    rank['Foreign Contrib Score'] = to_pct(rank['foreign_contrib_pct'])
-    unusual_bonus = uv.reindex(rank['Stock Code']).fillna(0) * 5
-    
-    rank['Potential Score'] = (
-        rank['Trend Score'].fillna(0) * W['blend_trend'] +
-        rank['Momentum Score'].fillna(0) * W['blend_mom'] +
-        rank['NBSA Score'].fillna(50) * W['blend_nbsa'] +
-        rank['Foreign Contrib Score'].fillna(50) * W['blend_fcontrib'] +
-        unusual_bonus.values * W['blend_unusual']
-    )
+    rank = tr.merge(mo[['Stock Code', 'Momentum Score']], on='Stock Code', how='outer')
+    rank['Potential Score'] = rank['Trend Score'].fillna(0)*0.5 + rank['Momentum Score'].fillna(0)*0.5
+    if 'had_unusual_volume' in mo.columns:
+        bonus = mo.set_index('Stock Code')['had_unusual_volume'].reindex(rank['Stock Code']).fillna(False).astype(int) * 10
+        rank['Potential Score'] += bonus.values
 
     top20 = rank.sort_values('Potential Score', ascending=False).head(20).copy()
-    top20.insert(0, 'Analysis Date', latest_date.strftime('%Y-%m-%d'))
     return top20, "Success", "success"
 
-# --- FUNGSI FLOW UPDATE (1M, 3M, 6M) ---
+# --- FUNGSI FLOW UPDATE (LOGIC KONSISTENSI & PERIODE) ---
 @st.cache_data(ttl=3600)
-def calculate_nff_summary(df, max_date):
-    """Menghitung NFF untuk periode 1 Bulan, 3 Bulan, 6 Bulan"""
-    # Definisi Periode dalam Hari
-    periods = {
-        '1 Bulan': 30, 
-        '3 Bulan': 90, 
-        '6 Bulan': 180
-    }
-    
+def calculate_nff_summary_enhanced(df, max_date):
+    """
+    Menghitung Summary NFF dengan Konsistensi.
+    Logic:
+    1. Filter data dalam periode (1M, 3M, 6M).
+    2. Hitung Total Net Buy (Sum).
+    3. Hitung Frekuensi Akumulasi (Berapa hari asing Net Buy > 0).
+    4. Hitung Rasio Konsistensi (Freq / Total Trading Days).
+    """
+    periods = {'1 Bulan': 30, '3 Bulan': 90, '6 Bulan': 180}
     results = {}
     latest_data = df[df['Last Trading Date'] == max_date].set_index('Stock Code')
     
@@ -312,15 +229,24 @@ def calculate_nff_summary(df, max_date):
         # Ambil data sejak start_date sampai max_date
         df_period = df[(df['Last Trading Date'] >= start_date) & (df['Last Trading Date'] <= max_date)].copy()
         
-        # Group by Stock dan Sum NFF
-        nff_agg = df_period.groupby('Stock Code')['NFF (Rp)'].sum()
+        # Aggregasi Pintar
+        agg = df_period.groupby('Stock Code').agg(
+            Total_Net_Buy=('NFF (Rp)', 'sum'),
+            Trading_Days=('Last Trading Date', 'nunique'),
+            Pos_Days=('NFF (Rp)', lambda x: (x > 0).sum())
+        )
         
-        # Gabungkan dengan info Harga Terakhir
-        df_agg = pd.DataFrame(nff_agg).join(latest_data.get('Close', pd.Series())).join(latest_data.get('Sector', pd.Series()))
-        df_agg.columns = ['Total Net Buy (Rp)', 'Close', 'Sector']
+        # Hitung Konsistensi
+        agg['Konsistensi (%)'] = (agg['Pos_Days'] / agg['Trading_Days']) 
         
-        # Sort dari terbesar (Accumulation)
-        results[name] = df_agg.sort_values(by='Total Net Buy (Rp)', ascending=False).reset_index()
+        # Gabungkan Data
+        df_final = agg.join(latest_data[['Close', 'Sector']], how='inner').reset_index()
+        
+        # Filter hanya yang Net Buy Positif
+        df_final = df_final[df_final['Total_Net_Buy'] > 0]
+        
+        # Sorting: Prioritas Value Besar
+        results[name] = df_final.sort_values(by='Total_Net_Buy', ascending=False)
         
     return results
 
@@ -449,21 +375,16 @@ st.markdown("<div class='header-title'>TERMINAL SAHAM PRO</div>", unsafe_allow_h
 st.markdown("<div class='header-subtitle'>Advanced Market Intelligence • Flow Analysis • MSCI Proxy</div>", unsafe_allow_html=True)
 
 df, status_msg, status_level = load_data()
-
-if status_level == "success": st.toast(status_msg, icon="⚡")
-elif status_level == "error": st.error(status_msg); st.stop()
+if status_level == "error": st.error(status_msg); st.stop()
 
 # --- SIDEBAR ---
 with st.sidebar:
     st.markdown("### 🎛️ SYSTEM CONTROL")
-    if st.button("🔄 REFRESH DATA", use_container_width=True): 
-        st.cache_data.clear()
-        st.rerun()
-
+    if st.button("🔄 REFRESH DATA", use_container_width=True): st.cache_data.clear(); st.rerun()
     max_date = df['Last Trading Date'].max().date()
     selected_date = st.date_input("ANALYSIS DATE", max_date, min_value=df['Last Trading Date'].min().date(), max_value=max_date, format="DD-MM-YYYY")
     df_day = df[df['Last Trading Date'].dt.date == selected_date].copy()
-
+    
     st.markdown("---")
     st.markdown("### 🔍 WATCHLIST FILTER")
     selected_stocks_filter = st.multiselect("Stock Ticker", sorted(df_day["Stock Code"].unique()))
@@ -476,7 +397,7 @@ with st.sidebar:
 # --- TABS ---
 tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs([
     "📊 DASHBOARD", "📈 DEEP DIVE", "📋 RAW DATA",
-    "🏆 TOP 20", "🌊 NET FLOW", "💰 MONEY FLOW",
+    "🏆 TOP 20", "🌊 NET FLOW (ASING)", "💰 MONEY FLOW",
     "🧪 BACKTEST", "💼 PORTFOLIO", "🌏 MSCI PROXY"
 ])
 
@@ -490,25 +411,24 @@ with tab1:
     st.markdown('</div>', unsafe_allow_html=True)
     
     col_g, col_l, col_v = st.columns(3)
-    
-    def show_top_card(title, data, sort_col, asc, val_col, fmt_func):
+    def show_top_card(title, data, sort_col, asc, val_col, fmt):
         st.markdown(f"**{title}**")
         top = data.sort_values(sort_col, ascending=asc).head(10)[['Stock Code', 'Close', val_col]].reset_index(drop=True)
-        top['Close'] = top['Close'].apply(lambda x: f"{x:,.0f}")
-        top[val_col] = top[val_col].apply(fmt_func)
-        st.dataframe(top, use_container_width=True, hide_index=True)
+        st.dataframe(top, use_container_width=True, hide_index=True, column_config={
+            "Close": st.column_config.NumberColumn(format="%d"),
+            val_col: st.column_config.NumberColumn(format=fmt)
+        })
 
-    with col_g: show_top_card("🚀 TOP GAINERS", df_day, "Change %", False, "Change %", lambda x: f"{x:+.2f}%")
-    with col_l: show_top_card("🔻 TOP LOSERS", df_day, "Change %", True, "Change %", lambda x: f"{x:+.2f}%")
-    with col_v: show_top_card("💰 TOP VALUE", df_day, "Value", False, "Value", lambda x: f"{x/1e9:,.1f} M")
+    with col_g: show_top_card("🚀 TOP GAINERS", df_day, "Change %", False, "Change %", "%.2f %%")
+    with col_l: show_top_card("🔻 TOP LOSERS", df_day, "Change %", True, "Change %", "%.2f %%")
+    with col_v: show_top_card("💰 TOP VALUE", df_day, "Value", False, "Value", "Rp %.0f")
 
 # --- TAB 2: INDIVIDUAL ---
 with tab2:
     st.markdown('<div class="css-card">', unsafe_allow_html=True)
     all_stocks = sorted(df["Stock Code"].unique())
-    col_sel, col_empty = st.columns([1, 2])
-    with col_sel:
-        stock = st.selectbox("SEARCH STOCK", all_stocks, index=all_stocks.index("BBRI") if "BBRI" in all_stocks else 0)
+    col_sel, _ = st.columns([1, 2])
+    with col_sel: stock = st.selectbox("SEARCH STOCK", all_stocks, index=all_stocks.index("BBRI") if "BBRI" in all_stocks else 0)
     
     if stock:
         df_stock = df[df['Stock Code'] == stock].sort_values('Last Trading Date')
@@ -520,27 +440,13 @@ with tab2:
             c3.metric("MFV (Rp)", f"Rp {lr['Money Flow Value']:,.0f}")
             c4.metric("MF RATIO", f"{lr.get('Money Flow Ratio (20D)', 0):.3f}")
             
-            # Advanced Chart
-            fig = make_subplots(rows=4, cols=1, shared_xaxes=True, vertical_spacing=0.03, 
-                               row_heights=[0.4, 0.2, 0.2, 0.2], specs=[[{"secondary_y": True}], [{}], [{}], [{}]])
-            
-            # Price & MA
+            fig = make_subplots(rows=4, cols=1, shared_xaxes=True, vertical_spacing=0.03, row_heights=[0.4, 0.2, 0.2, 0.2], specs=[[{"secondary_y": True}], [{}], [{}], [{}]])
             fig.add_trace(go.Scatter(x=df_stock['Last Trading Date'], y=df_stock['Close'], name='Close', line=dict(color='#2962FF')), row=1, col=1, secondary_y=True)
-            if 'MA20' in df_stock.columns:
-                 fig.add_trace(go.Scatter(x=df_stock['Last Trading Date'], y=df_stock['MA20'], name='MA20', line=dict(color='orange', width=1)), row=1, col=1, secondary_y=True)
-
-            # NFF
             colors_nff = np.where(df_stock['NFF (Rp)'] >= 0, '#00E676', '#FF1744')
-            fig.add_trace(go.Bar(x=df_stock['Last Trading Date'], y=df_stock['NFF (Rp)'], name='Net Foreign Flow', marker_color=colors_nff), row=1, col=1)
-            
-            # MFV
+            fig.add_trace(go.Bar(x=df_stock['Last Trading Date'], y=df_stock['NFF (Rp)'], name='NFF', marker_color=colors_nff), row=1, col=1)
             colors_mfv = np.where(df_stock['Money Flow Value'] >= 0, '#00B0FF', '#FF9100')
-            fig.add_trace(go.Bar(x=df_stock['Last Trading Date'], y=df_stock['Money Flow Value'], name='Money Flow Val', marker_color=colors_mfv), row=2, col=1)
-            
-            # Volume
+            fig.add_trace(go.Bar(x=df_stock['Last Trading Date'], y=df_stock['Money Flow Value'], name='MFV', marker_color=colors_mfv), row=2, col=1)
             fig.add_trace(go.Bar(x=df_stock['Last Trading Date'], y=df_stock['Volume'], name='Volume', marker_color='#607D8B'), row=3, col=1)
-            
-            # MF Ratio
             if 'Money Flow Ratio (20D)' in df_stock.columns:
                 fig.add_trace(go.Scatter(x=df_stock['Last Trading Date'], y=df_stock['Money Flow Ratio (20D)'], name='MF Ratio', line=dict(color='#AA00FF')), row=4, col=1)
                 fig.add_hline(y=0, line_dash="dash", line_color="gray", row=4, col=1)
@@ -552,80 +458,58 @@ with tab2:
 # --- TAB 3: DATA FILTER ---
 with tab3: 
     st.markdown("#### FILTERED RAW DATA")
-    st.dataframe(df_filtered, use_container_width=True)
+    st.dataframe(df_filtered, use_container_width=True, column_config={
+        "Close": st.column_config.NumberColumn(format="%d"),
+        "Volume": st.column_config.NumberColumn(format="%d"),
+        "Value": st.column_config.NumberColumn(format="Rp %.0f")
+    })
 
 # --- TAB 4: TOP 20 ---
 with tab4:
     st.markdown('<div class="css-card">', unsafe_allow_html=True)
-    st.markdown("#### 🏆 TOP 20 POTENTIAL STOCKS (ALGORITHM)")
-    st.caption("Scoring System: Trend (40%), Momentum (35%), NBSA (20%), Other (5%)")
-    
-    @st.cache_data(ttl=3600)
-    def get_cached_top20(dframe, tgl): return calculate_potential_score(dframe, tgl)
-    
-    df_top20, msg, status = get_cached_top20(df, pd.Timestamp(selected_date))
-    
+    st.markdown("#### 🏆 TOP 20 POTENTIAL STOCKS")
+    df_top20, msg, status = calculate_potential_score(df, pd.Timestamp(selected_date))
     if status == "success":
-        st.dataframe(
-            df_top20, 
-            use_container_width=True, 
-            hide_index=True, 
-            column_config={
-                "Potential Score": st.column_config.ProgressColumn("Final Score", format="%.2f", min_value=0, max_value=100),
-                "last_price": st.column_config.NumberColumn("Close", format="%d"),
-                "total_net_ff_rp": st.column_config.NumberColumn("NFF 30D", format="Rp %.0f")
-            }
-        )
-    else: 
-        st.warning(msg)
+        st.dataframe(df_top20, use_container_width=True, hide_index=True, column_config={
+            "Potential Score": st.column_config.ProgressColumn("Final Score", format="%.2f", min_value=0, max_value=100),
+            "last_price": st.column_config.NumberColumn("Close", format="%d"),
+            "total_net_ff_rp": st.column_config.NumberColumn("NFF 30D", format="Rp %.0f")
+        })
+    else: st.warning(msg)
     st.markdown('</div>', unsafe_allow_html=True)
 
-# --- TAB 5: NET FOREIGN FLOW (UPDATED) ---
+# --- TAB 5: NET FOREIGN FLOW (UPDATED LOGIC) ---
 with tab5:
     st.markdown('<div class="css-card">', unsafe_allow_html=True)
-    st.markdown("#### 🌊 NET FOREIGN FLOW SUMMARY (ACCUMULATION)")
-    st.caption("Saham dengan akumulasi asing bersih terbesar dalam periode 1, 3, dan 6 bulan.")
+    st.markdown("#### 🌊 NET FOREIGN FLOW SUMMARY (ACCUMULATION & CONSISTENCY)")
+    st.caption("Saham dengan akumulasi asing bersih terbesar DAN frekuensi beli yang tinggi.")
     
-    # Hitung data summary
-    nff_summary = calculate_nff_summary(df, pd.Timestamp(selected_date))
+    nff_summary = calculate_nff_summary_enhanced(df, pd.Timestamp(selected_date))
     
+    # Helper to show NFF Table
+    def show_nff_table(data):
+        st.dataframe(
+            data.head(20), 
+            hide_index=True, 
+            use_container_width=True,
+            column_config={
+                "Close": st.column_config.NumberColumn(format="%d"),
+                "Total_Net_Buy": st.column_config.ProgressColumn("Net Buy (Rp)", format="Rp %.0f", min_value=0, max_value=data['Total_Net_Buy'].max()),
+                "Pos_Days": st.column_config.NumberColumn("Freq (Hari)", format="%d"),
+                "Konsistensi (%)": st.column_config.NumberColumn("Konsistensi", format="%.1f %%")
+            }
+        )
+
     c1, c2, c3 = st.columns(3)
-    
     with c1:
         st.markdown("**🗓️ 1 BULAN (30 Hari)**")
-        df_1m = nff_summary['1 Bulan'].head(20)
-        st.dataframe(
-            df_1m, 
-            hide_index=True, 
-            use_container_width=True,
-            column_config={
-                "Total Net Buy (Rp)": st.column_config.ProgressColumn("Net Buy", format="Rp %.0f", min_value=0, max_value=df_1m['Total Net Buy (Rp)'].max())
-            }
-        )
-        
+        show_nff_table(nff_summary['1 Bulan'])
     with c2:
         st.markdown("**🗓️ 3 BULAN (90 Hari)**")
-        df_3m = nff_summary['3 Bulan'].head(20)
-        st.dataframe(
-            df_3m, 
-            hide_index=True, 
-            use_container_width=True,
-            column_config={
-                "Total Net Buy (Rp)": st.column_config.ProgressColumn("Net Buy", format="Rp %.0f", min_value=0, max_value=df_3m['Total Net Buy (Rp)'].max())
-            }
-        )
-        
+        show_nff_table(nff_summary['3 Bulan'])
     with c3:
         st.markdown("**🗓️ 6 BULAN (180 Hari)**")
-        df_6m = nff_summary['6 Bulan'].head(20)
-        st.dataframe(
-            df_6m, 
-            hide_index=True, 
-            use_container_width=True,
-            column_config={
-                "Total Net Buy (Rp)": st.column_config.ProgressColumn("Net Buy", format="Rp %.0f", min_value=0, max_value=df_6m['Total Net Buy (Rp)'].max())
-            }
-        )
+        show_nff_table(nff_summary['6 Bulan'])
     st.markdown('</div>', unsafe_allow_html=True)
 
 # --- TAB 6: MONEY FLOW ---
@@ -636,51 +520,34 @@ with tab6:
     c1, c2 = st.columns(2)
     with c1:
         st.markdown("**Top MFV 7 Days**")
-        st.dataframe(mfv7.head(10), hide_index=True, use_container_width=True)
+        st.dataframe(mfv7.head(10), hide_index=True, use_container_width=True, column_config={"Total Money Flow (Rp)": st.column_config.NumberColumn(format="Rp %.0f"), "Harga Terakhir": st.column_config.NumberColumn(format="%d")})
     with c2:
         st.markdown("**Top MFV 30 Days**")
-        st.dataframe(mfv30.head(10), hide_index=True, use_container_width=True)
+        st.dataframe(mfv30.head(10), hide_index=True, use_container_width=True, column_config={"Total Money Flow (Rp)": st.column_config.NumberColumn(format="Rp %.0f"), "Harga Terakhir": st.column_config.NumberColumn(format="%d")})
     st.markdown('</div>', unsafe_allow_html=True)
 
 # --- TAB 7: BACKTEST ---
 with tab7:
     st.markdown('<div class="css-card">', unsafe_allow_html=True)
-    st.markdown("#### 🧪 ALGORITHM AUDIT (BACKTEST)")
     col_bt1, col_bt2 = st.columns([1, 3])
     with col_bt1:
         days_to_test = st.number_input("Lookback Days", 7, 90, 30, 7)
         run_btn = st.button("🚀 RUN AUDIT", type="primary", use_container_width=True)
-        
     if run_btn:
-        with st.spinner("Processing Historical Data..."): 
+        with st.spinner("Processing..."): 
             df_backtest = run_backtest_analysis(df, days_back=days_to_test)
-        
         if not df_backtest.empty:
             total_s = len(df_backtest)
             win_s = len(df_backtest[df_backtest['Return to Date (%)'] > 0])
-            wr = (win_s/total_s)*100
-            
             k1, k2, k3 = st.columns(3)
             k1.metric("SIGNALS", f"{total_s}x")
-            k2.metric("WIN RATE", f"{wr:.1f}%")
+            k2.metric("WIN RATE", f"{(win_s/total_s)*100:.1f}%")
             k3.metric("AVG RETURN", f"{df_backtest['Return to Date (%)'].mean():.2f}%")
-            
-            st.markdown("### ⭐ PERFORMANCE LEADERBOARD")
-            freq = df_backtest.groupby('Stock Code').agg(
-                Freq=('Signal Date','count'), 
-                Avg_Ret=('Return to Date (%)','mean'), 
-                Last_Price=('Current Price','last')
-            ).reset_index().sort_values(['Freq','Avg_Ret'], ascending=[False,False])
-            
-            st.dataframe(
-                freq, use_container_width=True, hide_index=True, 
-                column_config={
-                    "Freq": st.column_config.ProgressColumn("Freq", format="%d x", max_value=int(freq['Freq'].max())), 
-                    "Avg_Ret": st.column_config.NumberColumn("Avg Return", format="%.2f %%")
-                }
-            )
-            with st.expander("VIEW LOGS"): st.dataframe(df_backtest.sort_values('Signal Date', ascending=False))
-        else: st.warning("No signals generated in this period.")
+            st.dataframe(df_backtest, use_container_width=True, column_config={
+                "Entry Price": st.column_config.NumberColumn(format="%d"),
+                "Current Price": st.column_config.NumberColumn(format="%d"),
+                "Return to Date (%)": st.column_config.NumberColumn(format="%.2f %%")
+            })
     st.markdown('</div>', unsafe_allow_html=True)
 
 # --- TAB 8: PORTFOLIO ---
@@ -688,7 +555,6 @@ with tab8:
     st.markdown('<div class="css-card">', unsafe_allow_html=True)
     st.markdown("#### 💼 PORTFOLIO SIMULATOR")
     avail_dates = sorted(df['Last Trading Date'].unique())
-    
     with st.form("port_form"):
         c1, c2, c3, c4 = st.columns(4)
         with c1: start_d = st.selectbox("BUY DATE", avail_dates, index=max(0, len(avail_dates)-31), format_func=lambda x: pd.Timestamp(x).strftime('%d-%m-%Y'))
@@ -703,47 +569,39 @@ with tab8:
         else:
             with st.spinner("Calculating PnL..."): 
                 df_port, sum_port, msg = simulate_portfolio_range(df, cap, pd.Timestamp(start_d), pd.Timestamp(end_d))
-            
             if msg == "success":
                 m1, m2, m3 = st.columns(3)
                 m1.metric("INITIAL CAPITAL", f"Rp {sum_port['Initial Capital']:,.0f}")
                 m2.metric("FINAL VALUE", f"Rp {sum_port['Final Portfolio Value']:,.0f}")
                 m3.metric("NET PROFIT", f"Rp {sum_port['Net Profit']:,.0f}", delta=f"{sum_port['Total ROI']:.2f}%")
-                
-                c_ch1, c_ch2 = st.columns([2,1])
-                with c_ch1: st.plotly_chart(px.bar(df_port.sort_values('Gain/Loss (Rp)', ascending=False), x='Stock Code', y='Gain/Loss (Rp)', color='Gain/Loss (Rp)', color_continuous_scale=['red', 'green'], title="PnL Distribution", template='plotly_dark'), use_container_width=True)
-                with c_ch2: st.plotly_chart(px.pie(df_port, names='Sector', values='Final Value', title="Sector Allocation", template='plotly_dark'), use_container_width=True)
-                
-                st.dataframe(df_port[['Stock Code', 'Buy Price', 'Sell Price', 'Gain/Loss (Rp)', 'ROI (%)']], use_container_width=True, hide_index=True)
+                st.dataframe(df_port[['Stock Code', 'Buy Price', 'Sell Price', 'Gain/Loss (Rp)', 'ROI (%)']], use_container_width=True, hide_index=True, column_config={
+                    "Buy Price": st.column_config.NumberColumn(format="%d"),
+                    "Sell Price": st.column_config.NumberColumn(format="%d"),
+                    "Gain/Loss (Rp)": st.column_config.NumberColumn(format="Rp %.0f"),
+                    "ROI (%)": st.column_config.NumberColumn(format="%.2f %%")
+                })
             else: st.error(msg)
     st.markdown('</div>', unsafe_allow_html=True)
 
-# --- TAB 9: MSCI SIMULATOR (OPTIMIZED) ---
+# --- TAB 9: MSCI ---
 with tab9:
     st.markdown('<div class="css-card">', unsafe_allow_html=True)
     st.markdown("#### 🌏 MSCI PROXY SIMULATOR")
     st.info("Target: Float Cap > $1.5B & Liquidity (ATVR) > 15%")
-    
     if 'Listed Shares' not in df.columns: st.error("❌ Data 'Listed Shares' missing.")
     else:
-        # Input Kurs & Parameter
         with st.expander("⚙️ CONFIGURATION", expanded=True):
             c_p1, c_p2 = st.columns(2)
-            with c_p1: 
-                usd_idr = st.number_input("USD/IDR RATE", value=16500, step=50)
+            with c_p1: usd_idr = st.number_input("USD/IDR RATE", value=16500, step=50)
             with c_p2:
                 cut_float_usd = st.number_input("MIN FLOAT CAP ($B)", value=1.5, step=0.1)
                 cut_atvr = st.number_input("MIN LIQUIDITY (ATVR %)", value=15.0, step=1.0)
-
-        # Hitung Data (Versi Cepat)
         with st.spinner("Calculating MSCI Universe..."):
             df_msci = calculate_msci_projection_v2_optimized(df, df['Last Trading Date'].max(), usd_idr)
         
-        # Categorization Logic
         def cat_msci(r):
             pass_size = (r['Float Cap ($B)'] >= cut_float_usd)
             pass_liq = (r['ATVR 12M (%)'] >= cut_atvr) and (r['ATVR 3M (%)'] >= cut_atvr)
-            
             if pass_size and pass_liq: return "✅ Potential Standard"
             elif pass_size and not pass_liq: return "⚠️ Risk Deletion (Illiquid)"
             elif (r['Float Cap ($B)'] >= (cut_float_usd * 0.5)) and pass_liq: return "🔹 Small Cap Potential"
@@ -751,54 +609,12 @@ with tab9:
         
         if not df_msci.empty:
             df_msci['Status'] = df_msci.apply(cat_msci, axis=1)
-            
-            # --- VISUALISASI ---
-            df_chart = df_msci.head(100)
-            
-            fig_msci = px.scatter(
-                df_chart, 
-                x="ATVR 12M (%)", 
-                y="Float Cap ($B)", 
-                color="Status", 
-                size="Full Cap ($B)", 
-                hover_data=['Stock Code', 'ATVR 3M (%)'], 
-                text="Stock Code", 
-                color_discrete_map={
-                    "✅ Potential Standard": "#00E676", 
-                    "⚠️ Risk Deletion (Illiquid)": "#FF1744", 
-                    "🔹 Small Cap Potential": "#2979FF", 
-                    "🔻 Micro / Others": "#607D8B"
-                },
-                title=f"MSCI Map: Liquidity vs Float Size (Min Float ${cut_float_usd}B)",
-                template='plotly_dark'
-            )
-            fig_msci.add_hline(y=cut_float_usd, line_dash="dash", annotation_text=f"Min Float")
-            fig_msci.add_vline(x=cut_atvr, line_dash="dash", annotation_text=f"Min Liq")
-            st.plotly_chart(fig_msci, use_container_width=True)
-            
-            # --- TABEL HASIL ---
             col_t1, col_t2 = st.columns(2)
             show_cols = ['Rank', 'Stock Code', 'Status', 'Float Cap ($B)', 'ATVR 3M (%)', 'ATVR 12M (%)']
-            
             with col_t1: 
                 st.markdown("#### ✅ TOP CANDIDATES")
-                st.dataframe(
-                    df_msci[df_msci['Status']=="✅ Potential Standard"][show_cols], 
-                    hide_index=True, use_container_width=True,
-                    column_config={
-                        "Float Cap ($B)": st.column_config.NumberColumn(format="$ %.2f B"),
-                        "ATVR 3M (%)": st.column_config.NumberColumn(format="%.1f %%")
-                    }
-                )
-            
+                st.dataframe(df_msci[df_msci['Status']=="✅ Potential Standard"][show_cols], hide_index=True, use_container_width=True, column_config={"Float Cap ($B)": st.column_config.NumberColumn(format="$ %.2f B"), "ATVR 3M (%)": st.column_config.NumberColumn(format="%.1f %%")})
             with col_t2: 
                 st.markdown("#### ⚠️ RISK LIST (ILLIQUID)")
-                st.dataframe(
-                    df_msci[df_msci['Status']=="⚠️ Risk Deletion (Illiquid)"][show_cols], 
-                    hide_index=True, use_container_width=True,
-                    column_config={
-                        "Float Cap ($B)": st.column_config.NumberColumn(format="$ %.2f B"),
-                        "ATVR 3M (%)": st.column_config.NumberColumn(format="%.1f %%")
-                    }
-                )
+                st.dataframe(df_msci[df_msci['Status']=="⚠️ Risk Deletion (Illiquid)"][show_cols], hide_index=True, use_container_width=True, column_config={"Float Cap ($B)": st.column_config.NumberColumn(format="$ %.2f B"), "ATVR 3M (%)": st.column_config.NumberColumn(format="%.1f %%")})
     st.markdown('</div>', unsafe_allow_html=True)
