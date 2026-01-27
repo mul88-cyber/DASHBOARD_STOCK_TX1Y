@@ -438,10 +438,25 @@ with tab2:
             c1.metric("CLOSE", f"Rp {lr['Close']:,.0f}")
             c2.metric("NFF (Rp)", f"Rp {lr['NFF (Rp)']:,.0f}")
             c3.metric("MFV (Rp)", f"Rp {lr['Money Flow Value']:,.0f}")
-            c4.metric("MF RATIO", f"{lr.get('Money Flow Ratio (20D)', 0):.3f}")
+            
+            # 👇 PERBAIKAN DI SINI (Baris Error 441)
+            # Kita pastikan nilainya jadi float dulu sebelum diformat
+            raw_mf = lr.get('Money Flow Ratio (20D)', 0)
+            try:
+                mf_val = float(raw_mf)
+            except:
+                mf_val = 0.0
+            
+            c4.metric("MF RATIO", f"{mf_val:.3f}")
+            # 👆 SELESAI PERBAIKAN
             
             fig = make_subplots(rows=4, cols=1, shared_xaxes=True, vertical_spacing=0.03, row_heights=[0.4, 0.2, 0.2, 0.2], specs=[[{"secondary_y": True}], [{}], [{}], [{}]])
             fig.add_trace(go.Scatter(x=df_stock['Last Trading Date'], y=df_stock['Close'], name='Close', line=dict(color='#2962FF')), row=1, col=1, secondary_y=True)
+            
+            # Tambahkan MA20 jika ada
+            if 'MA20' in df_stock.columns:
+                 fig.add_trace(go.Scatter(x=df_stock['Last Trading Date'], y=df_stock['MA20'], name='MA20', line=dict(color='orange', width=1)), row=1, col=1, secondary_y=True)
+
             colors_nff = np.where(df_stock['NFF (Rp)'] >= 0, '#00E676', '#FF1744')
             fig.add_trace(go.Bar(x=df_stock['Last Trading Date'], y=df_stock['NFF (Rp)'], name='NFF', marker_color=colors_nff), row=1, col=1)
             colors_mfv = np.where(df_stock['Money Flow Value'] >= 0, '#00B0FF', '#FF9100')
