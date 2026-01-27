@@ -25,14 +25,14 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- 🔥 DARK MODE CSS INJECTION (BLOOMBERG STYLE) ---
+# --- 🔥 DARK MODE CSS INJECTION (FIXED TEXT VISIBILITY) ---
 st.markdown("""
 <style>
     /* 1. Main Background - Deep Dark */
     .stApp {
         background-color: #0E1117;
-        color: #FAFAFA;
-        font-family: 'Roboto Mono', monospace; /* Font ala Terminal */
+        color: #E6E6E6; /* Default text color putih gading */
+        font-family: 'Roboto Mono', monospace; 
     }
 
     /* 2. Sidebar - Darker Grey */
@@ -41,7 +41,12 @@ st.markdown("""
         border-right: 1px solid #30363D;
     }
     
-    /* 3. Metrics - Neon Style */
+    /* 3. Text Visibility Fixes */
+    p, span, div {
+        color: #E6E6E6; /* Paksa teks umum jadi putih */
+    }
+    
+    /* 4. Metrics - Neon Style */
     div[data-testid="stMetricValue"] {
         font-size: 28px !important;
         font-weight: 700 !important;
@@ -50,16 +55,16 @@ st.markdown("""
     }
     div[data-testid="stMetricLabel"] {
         font-size: 14px !important;
-        color: #8B949E !important;
-        font-weight: 500 !important;
+        color: #8B949E !important; /* Abu terang */
+        font-weight: 600 !important;
     }
     div[data-testid="stMetricDelta"] svg {
         fill: #00E676 !important;
     }
 
-    /* 4. Cards/Containers */
+    /* 5. Cards/Containers */
     .css-card {
-        background-color: #1E2329; /* Mirip Binance/Stockbit Dark */
+        background-color: #1E2329; 
         padding: 20px;
         border-radius: 8px;
         border: 1px solid #30363D;
@@ -67,24 +72,29 @@ st.markdown("""
         box-shadow: 0 4px 6px rgba(0,0,0,0.3);
     }
 
-    /* 5. Dataframes - Dark Table */
+    /* 6. Dataframes - Dark Table Fix */
+    /* Pastikan header dan cell terbaca */
     div[data-testid="stDataFrame"] {
-        background-color: #1E2329;
+        background-color: #1E2329 !important;
         border: 1px solid #30363D;
         border-radius: 8px;
     }
-    
-    /* 6. Headers */
-    h1, h2, h3, h4, h5 {
+    div[data-testid="stDataFrame"] div[role="grid"] {
         color: #E6E6E6 !important;
-        font-family: 'Inter', sans-serif; /* Header tetap clean sans */
-        font-weight: 800;
     }
     
-    /* 7. Buttons */
+    /* 7. Headers */
+    h1, h2, h3, h4, h5 {
+        color: #58A6FF !important; /* Biru muda ala terminal */
+        font-family: 'Inter', sans-serif;
+        font-weight: 800;
+        margin-top: 10px;
+    }
+    
+    /* 8. Buttons */
     div.stButton > button {
         background-color: #238636;
-        color: white;
+        color: white !important;
         border: 1px solid rgba(27, 31, 35, 0.15);
         border-radius: 6px;
         font-weight: 600;
@@ -92,6 +102,7 @@ st.markdown("""
     div.stButton > button:hover {
         background-color: #2EA043;
         border-color: rgba(27, 31, 35, 0.15);
+        color: white !important;
     }
 
     /* Custom Class for Titles */
@@ -282,23 +293,40 @@ def calculate_potential_score(df: pd.DataFrame, latest_date: pd.Timestamp):
     top20.insert(0, 'Analysis Date', latest_date.strftime('%Y-%m-%d'))
     return top20, "Success", "success"
 
+# --- FUNGSI FLOW UPDATE (1M, 3M, 6M) ---
 @st.cache_data(ttl=3600)
-def calculate_nff_top_stocks(df, max_date):
-    periods = {'7D': 7, '30D': 30, '90D': 90, '180D': 180}; results = {}
+def calculate_nff_summary(df, max_date):
+    """Menghitung NFF untuk periode 1 Bulan, 3 Bulan, 6 Bulan"""
+    # Definisi Periode dalam Hari
+    periods = {
+        '1 Bulan': 30, 
+        '3 Bulan': 90, 
+        '6 Bulan': 180
+    }
+    
+    results = {}
     latest_data = df[df['Last Trading Date'] == max_date].set_index('Stock Code')
     
     for name, days in periods.items():
         start_date = max_date - pd.Timedelta(days=days)
-        df_period = df[df['Last Trading Date'] >= start_date].copy()
+        # Ambil data sejak start_date sampai max_date
+        df_period = df[(df['Last Trading Date'] >= start_date) & (df['Last Trading Date'] <= max_date)].copy()
+        
+        # Group by Stock dan Sum NFF
         nff_agg = df_period.groupby('Stock Code')['NFF (Rp)'].sum()
+        
+        # Gabungkan dengan info Harga Terakhir
         df_agg = pd.DataFrame(nff_agg).join(latest_data.get('Close', pd.Series())).join(latest_data.get('Sector', pd.Series()))
-        df_agg.columns = ['Total Net FF (Rp)', 'Harga Terakhir', 'Sector']
-        results[name] = df_agg.sort_values(by='Total Net FF (Rp)', ascending=False).reset_index()
-    return results['7D'], results['30D'], results['90D'], results['180D']
+        df_agg.columns = ['Total Net Buy (Rp)', 'Close', 'Sector']
+        
+        # Sort dari terbesar (Accumulation)
+        results[name] = df_agg.sort_values(by='Total Net Buy (Rp)', ascending=False).reset_index()
+        
+    return results
 
 @st.cache_data(ttl=3600)
 def calculate_mfv_top_stocks(df, max_date):
-    periods = {'7D': 7, '30D': 30, '90D': 90, '180D': 180}; results = {}
+    periods = {'7D': 7, '30D': 30}; results = {}
     latest_data = df[df['Last Trading Date'] == max_date].set_index('Stock Code')
     
     for name, days in periods.items():
@@ -308,7 +336,7 @@ def calculate_mfv_top_stocks(df, max_date):
         df_agg = pd.DataFrame(mfv_agg).join(latest_data.get('Close', pd.Series())).join(latest_data.get('Sector', pd.Series()))
         df_agg.columns = ['Total Money Flow (Rp)', 'Harga Terakhir', 'Sector']
         results[name] = df_agg.sort_values(by='Total Money Flow (Rp)', ascending=False).reset_index()
-    return results['7D'], results['30D'], results['90D'], results['180D']
+    return results['7D'], results['30D']
 
 def run_backtest_analysis(df, days_back=90):
     all_dates = sorted(df['Last Trading Date'].unique())
@@ -552,20 +580,67 @@ with tab4:
         st.warning(msg)
     st.markdown('</div>', unsafe_allow_html=True)
 
-# --- TAB 5 & 6 (FLOW) ---
+# --- TAB 5: NET FOREIGN FLOW (UPDATED) ---
 with tab5:
-    st.markdown("#### 🌊 NET FOREIGN FLOW (ACCUMULATION)")
-    nff7, nff30, nff90, nff180 = calculate_nff_top_stocks(df, pd.Timestamp(selected_date))
-    c1, c2 = st.columns(2)
-    c1.markdown("**Top NFF 7 Days**"); c1.dataframe(nff7.head(10), hide_index=True, use_container_width=True)
-    c2.markdown("**Top NFF 30 Days**"); c2.dataframe(nff30.head(10), hide_index=True, use_container_width=True)
+    st.markdown('<div class="css-card">', unsafe_allow_html=True)
+    st.markdown("#### 🌊 NET FOREIGN FLOW SUMMARY (ACCUMULATION)")
+    st.caption("Saham dengan akumulasi asing bersih terbesar dalam periode 1, 3, dan 6 bulan.")
+    
+    # Hitung data summary
+    nff_summary = calculate_nff_summary(df, pd.Timestamp(selected_date))
+    
+    c1, c2, c3 = st.columns(3)
+    
+    with c1:
+        st.markdown("**🗓️ 1 BULAN (30 Hari)**")
+        df_1m = nff_summary['1 Bulan'].head(20)
+        st.dataframe(
+            df_1m, 
+            hide_index=True, 
+            use_container_width=True,
+            column_config={
+                "Total Net Buy (Rp)": st.column_config.ProgressColumn("Net Buy", format="Rp %.0f", min_value=0, max_value=df_1m['Total Net Buy (Rp)'].max())
+            }
+        )
+        
+    with c2:
+        st.markdown("**🗓️ 3 BULAN (90 Hari)**")
+        df_3m = nff_summary['3 Bulan'].head(20)
+        st.dataframe(
+            df_3m, 
+            hide_index=True, 
+            use_container_width=True,
+            column_config={
+                "Total Net Buy (Rp)": st.column_config.ProgressColumn("Net Buy", format="Rp %.0f", min_value=0, max_value=df_3m['Total Net Buy (Rp)'].max())
+            }
+        )
+        
+    with c3:
+        st.markdown("**🗓️ 6 BULAN (180 Hari)**")
+        df_6m = nff_summary['6 Bulan'].head(20)
+        st.dataframe(
+            df_6m, 
+            hide_index=True, 
+            use_container_width=True,
+            column_config={
+                "Total Net Buy (Rp)": st.column_config.ProgressColumn("Net Buy", format="Rp %.0f", min_value=0, max_value=df_6m['Total Net Buy (Rp)'].max())
+            }
+        )
+    st.markdown('</div>', unsafe_allow_html=True)
 
+# --- TAB 6: MONEY FLOW ---
 with tab6:
+    st.markdown('<div class="css-card">', unsafe_allow_html=True)
     st.markdown("#### 💰 MONEY FLOW VALUE (BIG MONEY)")
-    mfv7, mfv30, mfv90, mfv180 = calculate_mfv_top_stocks(df, pd.Timestamp(selected_date))
+    mfv7, mfv30 = calculate_mfv_top_stocks(df, pd.Timestamp(selected_date))
     c1, c2 = st.columns(2)
-    c1.markdown("**Top MFV 7 Days**"); c1.dataframe(mfv7.head(10), hide_index=True, use_container_width=True)
-    c2.markdown("**Top MFV 30 Days**"); c2.dataframe(mfv30.head(10), hide_index=True, use_container_width=True)
+    with c1:
+        st.markdown("**Top MFV 7 Days**")
+        st.dataframe(mfv7.head(10), hide_index=True, use_container_width=True)
+    with c2:
+        st.markdown("**Top MFV 30 Days**")
+        st.dataframe(mfv30.head(10), hide_index=True, use_container_width=True)
+    st.markdown('</div>', unsafe_allow_html=True)
 
 # --- TAB 7: BACKTEST ---
 with tab7:
