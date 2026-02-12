@@ -21,78 +21,116 @@ from googleapiclient.http import MediaIoBaseDownload
 st.set_page_config(
     page_title="Terminal Saham Pro v2",
     layout="wide",
-    page_icon="📈",
+    page_icon="🦅",
     initial_sidebar_state="expanded"
 )
 
-# --- 🔥 DARK MODE CSS (TEXT & TABLE FIX) ---
+# --- ✨ MODERN PREMIUM THEME (LIGHT MODE) ---
 st.markdown("""
 <style>
-    /* 1. Main Background */
+    /* 1. Global Setup */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
+    
     .stApp {
-        background-color: #0E1117;
-        color: #E6E6E6;
-        font-family: 'Roboto Mono', monospace; 
+        background-color: #F3F4F6; /* Light Gray Background */
+        color: #1F2937; /* Dark Gray Text */
+        font-family: 'Inter', sans-serif;
     }
 
     /* 2. Sidebar */
     [data-testid="stSidebar"] {
-        background-color: #161B22;
-        border-right: 1px solid #30363D;
+        background-color: #FFFFFF;
+        border-right: 1px solid #E5E7EB;
     }
     
-    /* 3. Text Visibility */
-    p, span, div, label {
-        color: #E6E6E6;
+    /* 3. Cards (Container) */
+    .css-card {
+        background-color: #FFFFFF;
+        padding: 20px;
+        border-radius: 12px;
+        border: 1px solid #E5E7EB;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+        margin-bottom: 20px;
     }
-    
-    /* 4. Metrics */
-    div[data-testid="stMetricValue"] {
-        font-size: 26px !important;
-        font-weight: 700 !important;
-        color: #00E676 !important;
-        text-shadow: 0 0 10px rgba(0, 230, 118, 0.2);
+
+    /* 4. Metrics Styling */
+    div[data-testid="stMetric"] {
+        background-color: #FFFFFF;
+        padding: 10px;
+        border-radius: 8px;
+        # border: 1px solid #F3F4F6;
     }
     div[data-testid="stMetricLabel"] {
-        font-size: 13px !important;
-        color: #8B949E !important;
+        font-size: 14px !important;
+        color: #6B7280 !important; /* Cool Gray */
         font-weight: 600 !important;
     }
-
-    /* 5. Cards */
-    .css-card {
-        background-color: #1E2329; 
-        padding: 15px;
-        border-radius: 8px;
-        border: 1px solid #30363D;
-        margin-bottom: 15px;
+    div[data-testid="stMetricValue"] {
+        font-size: 28px !important;
+        font-weight: 800 !important;
+        color: #111827 !important; /* Almost Black */
     }
-
-    /* 6. Dataframes (Table Fix) */
-    div[data-testid="stDataFrame"] {
-        background-color: #1E2329 !important;
-        border: 1px solid #30363D;
-        border-radius: 8px;
-    }
-    
-    /* 7. Headers */
-    h1, h2, h3, h4, h5 {
-        color: #58A6FF !important;
-        font-family: 'Inter', sans-serif;
-        font-weight: 800;
-        margin-top: 5px;
-    }
-    
-    /* 8. Buttons */
-    div.stButton > button {
-        background-color: #238636;
-        color: white !important;
-        border: 1px solid rgba(27, 31, 35, 0.15);
+    div[data-testid="stMetricDelta"] {
         font-weight: 600;
     }
+
+    /* 5. Dataframes */
+    div[data-testid="stDataFrame"] {
+        border: 1px solid #E5E7EB;
+        border-radius: 8px;
+        background-color: #FFFFFF;
+    }
+
+    /* 6. Tabs */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+        background-color: transparent;
+    }
+    .stTabs [data-baseweb="tab"] {
+        background-color: #FFFFFF;
+        border-radius: 6px;
+        padding: 8px 16px;
+        font-weight: 600;
+        color: #6B7280;
+        border: 1px solid #E5E7EB;
+    }
+    .stTabs [aria-selected="true"] {
+        background-color: #2563EB !important; /* Royal Blue */
+        color: #FFFFFF !important;
+        border-color: #2563EB !important;
+    }
+
+    /* 7. Buttons */
+    div.stButton > button {
+        background-color: #2563EB;
+        color: white !important;
+        border-radius: 6px;
+        border: none;
+        font-weight: 600;
+        transition: all 0.2s;
+    }
+    div.stButton > button:hover {
+        background-color: #1D4ED8;
+        box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.3);
+    }
+
+    /* 8. Custom Headers */
+    .header-title { 
+        font-size: 36px; 
+        font-weight: 800; 
+        color: #111827; 
+        letter-spacing: -0.5px;
+        margin-bottom: 4px;
+    }
+    .header-subtitle { 
+        font-size: 16px; 
+        color: #6B7280; 
+        font-weight: 500;
+        margin-bottom: 32px; 
+    }
     
-    .header-title { font-size: 32px; font-weight: 900; color: #58A6FF; letter-spacing: -1px; }
-    .header-subtitle { font-size: 14px; color: #8B949E; margin-bottom: 20px; font-family: 'Roboto Mono', monospace;}
+    /* 9. Utilities */
+    hr { margin: 2em 0; border-color: #E5E7EB; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -100,15 +138,8 @@ st.markdown("""
 FOLDER_ID = "1hX2jwUrAgi4Fr8xkcFWjCW6vbk6lsIlP" 
 FILE_NAME = "Kompilasi_Data_1Tahun.csv"
 
-# Bobot skor
-W = dict(
-    trend_akum=0.40, trend_ff=0.30, trend_mfv=0.20, trend_mom=0.10,
-    mom_price=0.40,  mom_vol=0.25,  mom_akum=0.25,  mom_ff=0.10,
-    blend_trend=0.35, blend_mom=0.35, blend_nbsa=0.20, blend_fcontrib=0.05, blend_unusual=0.05
-)
-
 # ==============================================================================
-# 📦 3) FUNGSI MEMUAT DATA
+# 📦 3) FUNGSI MEMUAT DATA (FIXED ROBUST)
 # ==============================================================================
 def get_gdrive_service():
     try:
@@ -124,7 +155,7 @@ def get_gdrive_service():
         return service, None
     except Exception as e: return None, f"❌ Auth Error: {e}"
 
-@st.cache_data(ttl=3600, show_spinner="🔄 Connecting to Market Data...")
+@st.cache_data(ttl=3600, show_spinner="🔄 Memuat Data Pasar...")
 def load_data():
     service, error_msg = get_gdrive_service()
     if error_msg: return pd.DataFrame(), error_msg, "error"
@@ -144,22 +175,50 @@ def load_data():
         df.columns = df.columns.str.strip()
         df['Last Trading Date'] = pd.to_datetime(df['Last Trading Date'], errors='coerce')
         
+        # Numeric Conversion
         cols_to_numeric = [
             'High', 'Low', 'Close', 'Volume', 'Value', 'Foreign Buy', 'Foreign Sell', 'Bid Volume', 'Offer Volume', 
-            'Change', 'Open Price', 'Listed Shares', 'Change %', 'Typical Price', 'Net Foreign Flow', 'Money Flow Value', 'Free Float'
+            'Change', 'Open Price', 'Listed Shares', 'Change %', 'Typical Price', 'Net Foreign Flow', 'Money Flow Value', 
+            'Free Float', 'Volume Spike (x)', 'Money Flow Ratio (20D)'
         ]
         for col in cols_to_numeric:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col].astype(str).str.strip().str.replace(r'[,\sRp\%]', '', regex=True), errors='coerce').fillna(0)
         
-        if 'Unusual Volume' in df.columns:
-            df['Unusual Volume'] = df['Unusual Volume'].astype(str).str.strip().str.lower().isin(['spike volume signifikan', 'true'])
+        # --- FIX: LOGIKA UNUSUAL VOLUME ---
+        # Kita buat kolom ini JIKA belum ada, atau bersihkan JIKA sudah ada
+        if 'Unusual Volume' not in df.columns:
+            # Skenario 1: Ambil dari 'Volume Spike (x)' > 2
+            if 'Volume Spike (x)' in df.columns:
+                df['Unusual Volume'] = df['Volume Spike (x)'] > 2.0
+            # Skenario 2: Ambil dari 'Big_Player_Anomaly'
+            elif 'Big_Player_Anomaly' in df.columns:
+                df['Unusual Volume'] = df['Big_Player_Anomaly'].astype(str).str.strip().str.lower() == 'true'
+            else:
+                df['Unusual Volume'] = False # Default False
+        else:
+            # Jika kolom sudah ada, bersihkan formatnya
+            df['Unusual Volume'] = df['Unusual Volume'].astype(str).str.strip().str.lower().isin(['spike volume signifikan', 'true', '1'])
         
-        df['Sector'] = df['Sector'].astype(str).str.strip().fillna('Others') if 'Sector' in df.columns else 'Others'
+        # --- FIX: LOGIKA FINAL SIGNAL & SECTOR ---
+        if 'Final Signal' in df.columns:
+            df['Final Signal'] = df['Final Signal'].astype(str).str.strip()
+        else:
+            df['Final Signal'] = 'Neutral'
+
+        if 'Sector' in df.columns:
+            df['Sector'] = df['Sector'].astype(str).str.strip().fillna('Others')
+        else:
+            df['Sector'] = 'Others'
+
         df = df.dropna(subset=['Last Trading Date', 'Stock Code'])
         
         if 'NFF (Rp)' not in df.columns:
-            df['NFF (Rp)'] = df['Net Foreign Flow'] * (df['Typical Price'] if 'Typical Price' in df.columns else df['Close'])
+            if 'Net Foreign Flow' in df.columns:
+                price_col = 'Typical Price' if 'Typical Price' in df.columns else 'Close'
+                df['NFF (Rp)'] = df['Net Foreign Flow'] * df[price_col]
+            else:
+                df['NFF (Rp)'] = 0
             
         return df, "Market Data Synced", "success"
     except Exception as e: return pd.DataFrame(), f"❌ Load Error: {e}", "error"
@@ -168,84 +227,60 @@ def load_data():
 # 🛠️ 4) FUNGSI KALKULASI UTAMA
 # ==============================================================================
 def pct_rank(s): return pd.to_numeric(s, errors="coerce").rank(pct=True, method="average").fillna(0) * 100
-def to_pct(s):
-    s = pd.to_numeric(s, errors="coerce").replace([np.inf, -np.inf], np.nan)
-    if s.notna().sum() <= 1: return pd.Series(50, index=s.index)
-    return (s - s.min()) / (s.max() - s.min()) * 100
 
 def calculate_potential_score(df, latest_date):
-    """Logika Raport Saham"""
     trend_start, mom_start = latest_date - pd.Timedelta(days=30), latest_date - pd.Timedelta(days=7)
     df_hist = df[df['Last Trading Date'] <= latest_date]
     trend_df = df_hist[df_hist['Last Trading Date'] >= trend_start]
     mom_df = df_hist[df_hist['Last Trading Date'] >= mom_start]
-    last_df = df_hist[df_hist['Last Trading Date'] == latest_date]
     
     if trend_df.empty: return pd.DataFrame(), "Data insufficient", "warning"
     
-    # Trend
     tr = trend_df.groupby('Stock Code').agg(
-        last_price=('Close', 'last'), last_final_signal=('Final Signal', 'last') if 'Final Signal' in df.columns else ('Close', 'count'),
-        total_net_ff_rp=('NFF (Rp)', 'sum'), total_money_flow=('Money Flow Value', 'sum'),
-        avg_change_pct=('Change %', 'mean'), sector=('Sector', 'last')
+        last_price=('Close', 'last'), 
+        total_net_ff_rp=('NFF (Rp)', 'sum'), 
+        total_money_flow=('Money Flow Value', 'sum'),
+        avg_change_pct=('Change %', 'mean'), 
+        sector=('Sector', 'last')
     ).reset_index()
     
-    # Momentum
     mo = mom_df.groupby('Stock Code').agg(
-        total_change_pct=('Change %', 'sum'), had_unusual_volume=('Unusual Volume', 'any'),
+        total_change_pct=('Change %', 'sum'), 
+        had_unusual_volume=('Unusual Volume', 'any'),
         total_net_ff_rp=('NFF (Rp)', 'sum')
     ).reset_index()
     
-    # Scoring Simpel
     tr['Trend Score'] = pct_rank(tr['total_net_ff_rp']) * 0.5 + pct_rank(tr['total_money_flow']) * 0.5
     mo['Momentum Score'] = pct_rank(mo['total_change_pct']) * 0.6 + pct_rank(mo['total_net_ff_rp']) * 0.4
     
-    rank = tr.merge(mo[['Stock Code', 'Momentum Score']], on='Stock Code', how='outer')
+    rank = tr.merge(mo[['Stock Code', 'Momentum Score', 'had_unusual_volume']], on='Stock Code', how='outer')
     rank['Potential Score'] = rank['Trend Score'].fillna(0)*0.5 + rank['Momentum Score'].fillna(0)*0.5
-    if 'had_unusual_volume' in mo.columns:
-        bonus = mo.set_index('Stock Code')['had_unusual_volume'].reindex(rank['Stock Code']).fillna(False).astype(int) * 10
-        rank['Potential Score'] += bonus.values
+    
+    if 'had_unusual_volume' in rank.columns:
+        bonus = rank['had_unusual_volume'].fillna(False).astype(int) * 10
+        rank['Potential Score'] += bonus
 
     top20 = rank.sort_values('Potential Score', ascending=False).head(20).copy()
     return top20, "Success", "success"
 
-# --- FUNGSI FLOW UPDATE (LOGIC KONSISTENSI & PERIODE) ---
 @st.cache_data(ttl=3600)
 def calculate_nff_summary_enhanced(df, max_date):
-    """
-    Menghitung Summary NFF dengan Konsistensi.
-    Logic:
-    1. Filter data dalam periode (1M, 3M, 6M).
-    2. Hitung Total Net Buy (Sum).
-    3. Hitung Frekuensi Akumulasi (Berapa hari asing Net Buy > 0).
-    4. Hitung Rasio Konsistensi (Freq / Total Trading Days).
-    """
     periods = {'1 Bulan': 30, '3 Bulan': 90, '6 Bulan': 180}
     results = {}
     latest_data = df[df['Last Trading Date'] == max_date].set_index('Stock Code')
     
     for name, days in periods.items():
         start_date = max_date - pd.Timedelta(days=days)
-        # Ambil data sejak start_date sampai max_date
         df_period = df[(df['Last Trading Date'] >= start_date) & (df['Last Trading Date'] <= max_date)].copy()
         
-        # Aggregasi Pintar
         agg = df_period.groupby('Stock Code').agg(
             Total_Net_Buy=('NFF (Rp)', 'sum'),
             Trading_Days=('Last Trading Date', 'nunique'),
             Pos_Days=('NFF (Rp)', lambda x: (x > 0).sum())
         )
-        
-        # Hitung Konsistensi
         agg['Konsistensi (%)'] = (agg['Pos_Days'] / agg['Trading_Days']) 
-        
-        # Gabungkan Data
         df_final = agg.join(latest_data[['Close', 'Sector']], how='inner').reset_index()
-        
-        # Filter hanya yang Net Buy Positif
         df_final = df_final[df_final['Total_Net_Buy'] > 0]
-        
-        # Sorting: Prioritas Value Besar
         results[name] = df_final.sort_values(by='Total_Net_Buy', ascending=False)
         
     return results
@@ -331,10 +366,8 @@ def calculate_msci_projection_v2_optimized(df, latest_date, usd_rate):
     val_3m_map = df_3m.groupby('Stock Code')['Value'].sum()
     
     results = []
-    
     for idx, row in df_last.iterrows():
-        code = row['Stock Code']
-        close = row['Close']
+        code = row['Stock Code']; close = row['Close']
         listed_shares = row.get('Listed Shares', 0)
         free_float_pct = row.get('Free Float', 0)
         
@@ -346,7 +379,6 @@ def calculate_msci_projection_v2_optimized(df, latest_date, usd_rate):
         
         val_12m = val_12m_map.get(code, 0)
         val_3m = val_3m_map.get(code, 0)
-        
         annualized_val_3m = val_3m * 4 
         float_mcap_full = float_mcap_idr_t * 1e12
         
@@ -369,18 +401,28 @@ def calculate_msci_projection_v2_optimized(df, latest_date, usd_rate):
     return df_msci
 
 # ==============================================================================
-# 💎 5) LAYOUT UTAMA (DARK MODE)
+# 💎 5) LAYOUT UTAMA (PREMIUM LIGHT)
 # ==============================================================================
 st.markdown("<div class='header-title'>TERMINAL SAHAM PRO</div>", unsafe_allow_html=True)
 st.markdown("<div class='header-subtitle'>Advanced Market Intelligence • Flow Analysis • MSCI Proxy</div>", unsafe_allow_html=True)
 
-df, status_msg, status_level = load_data()
-if status_level == "error": st.error(status_msg); st.stop()
+try:
+    df, status_msg, status_level = load_data()
+except Exception as e:
+    st.error(f"Critical Data Error: {e}")
+    st.stop()
+
+if status_level == "error": 
+    st.error(status_msg)
+    st.stop()
 
 # --- SIDEBAR ---
 with st.sidebar:
     st.markdown("### 🎛️ SYSTEM CONTROL")
-    if st.button("🔄 REFRESH DATA", use_container_width=True): st.cache_data.clear(); st.rerun()
+    if st.button("🔄 REFRESH DATA", use_container_width=True): 
+        st.cache_data.clear()
+        st.rerun()
+        
     max_date = df['Last Trading Date'].max().date()
     selected_date = st.date_input("ANALYSIS DATE", max_date, min_value=df['Last Trading Date'].min().date(), max_value=max_date, format="DD-MM-YYYY")
     df_day = df[df['Last Trading Date'].dt.date == selected_date].copy()
@@ -406,18 +448,23 @@ with tab1:
     st.markdown('<div class="css-card">', unsafe_allow_html=True)
     c1, c2, c3 = st.columns(3)
     c1.metric("ACTIVE STOCKS", f"{len(df_day):,.0f}")
-    c2.metric("UNUSUAL VOLUME", f"{df_day['Unusual Volume'].sum():,.0f}")
+    
+    # Safely get unusual volume sum
+    unusual_sum = df_day['Unusual Volume'].sum() if 'Unusual Volume' in df_day.columns else 0
+    c2.metric("UNUSUAL VOLUME", f"{unusual_sum:,.0f}")
+    
     c3.metric("TOTAL VALUE", f"Rp {df_day['Value'].sum()/1e9:,.1f} M")
     st.markdown('</div>', unsafe_allow_html=True)
     
     col_g, col_l, col_v = st.columns(3)
     def show_top_card(title, data, sort_col, asc, val_col, fmt):
-        st.markdown(f"**{title}**")
-        top = data.sort_values(sort_col, ascending=asc).head(10)[['Stock Code', 'Close', val_col]].reset_index(drop=True)
-        st.dataframe(top, use_container_width=True, hide_index=True, column_config={
-            "Close": st.column_config.NumberColumn(format="%d"),
-            val_col: st.column_config.NumberColumn(format=fmt)
-        })
+        with st.container():
+            st.markdown(f"**{title}**")
+            top = data.sort_values(sort_col, ascending=asc).head(10)[['Stock Code', 'Close', val_col]].reset_index(drop=True)
+            st.dataframe(top, use_container_width=True, hide_index=True, column_config={
+                "Close": st.column_config.NumberColumn(format="%d"),
+                val_col: st.column_config.NumberColumn(format=fmt)
+            })
 
     with col_g: show_top_card("🚀 TOP GAINERS", df_day, "Change %", False, "Change %", "%.2f %%")
     with col_l: show_top_card("🔻 TOP LOSERS", df_day, "Change %", True, "Change %", "%.2f %%")
@@ -439,34 +486,36 @@ with tab2:
             c2.metric("NFF (Rp)", f"Rp {lr['NFF (Rp)']:,.0f}")
             c3.metric("MFV (Rp)", f"Rp {lr['Money Flow Value']:,.0f}")
             
-            # 👇 PERBAIKAN DI SINI (Baris Error 441)
-            # Kita pastikan nilainya jadi float dulu sebelum diformat
             raw_mf = lr.get('Money Flow Ratio (20D)', 0)
-            try:
-                mf_val = float(raw_mf)
-            except:
-                mf_val = 0.0
-            
+            try: mf_val = float(raw_mf)
+            except: mf_val = 0.0
             c4.metric("MF RATIO", f"{mf_val:.3f}")
-            # 👆 SELESAI PERBAIKAN
             
             fig = make_subplots(rows=4, cols=1, shared_xaxes=True, vertical_spacing=0.03, row_heights=[0.4, 0.2, 0.2, 0.2], specs=[[{"secondary_y": True}], [{}], [{}], [{}]])
-            fig.add_trace(go.Scatter(x=df_stock['Last Trading Date'], y=df_stock['Close'], name='Close', line=dict(color='#2962FF')), row=1, col=1, secondary_y=True)
+            fig.add_trace(go.Scatter(x=df_stock['Last Trading Date'], y=df_stock['Close'], name='Close', line=dict(color='#2563EB', width=2)), row=1, col=1, secondary_y=True)
             
-            # Tambahkan MA20 jika ada
-            if 'MA20' in df_stock.columns:
-                 fig.add_trace(go.Scatter(x=df_stock['Last Trading Date'], y=df_stock['MA20'], name='MA20', line=dict(color='orange', width=1)), row=1, col=1, secondary_y=True)
-
-            colors_nff = np.where(df_stock['NFF (Rp)'] >= 0, '#00E676', '#FF1744')
+            colors_nff = np.where(df_stock['NFF (Rp)'] >= 0, '#10B981', '#EF4444')
             fig.add_trace(go.Bar(x=df_stock['Last Trading Date'], y=df_stock['NFF (Rp)'], name='NFF', marker_color=colors_nff), row=1, col=1)
-            colors_mfv = np.where(df_stock['Money Flow Value'] >= 0, '#00B0FF', '#FF9100')
+            
+            colors_mfv = np.where(df_stock['Money Flow Value'] >= 0, '#3B82F6', '#F59E0B')
             fig.add_trace(go.Bar(x=df_stock['Last Trading Date'], y=df_stock['Money Flow Value'], name='MFV', marker_color=colors_mfv), row=2, col=1)
-            fig.add_trace(go.Bar(x=df_stock['Last Trading Date'], y=df_stock['Volume'], name='Volume', marker_color='#607D8B'), row=3, col=1)
+            
+            fig.add_trace(go.Bar(x=df_stock['Last Trading Date'], y=df_stock['Volume'], name='Volume', marker_color='#9CA3AF'), row=3, col=1)
+            
             if 'Money Flow Ratio (20D)' in df_stock.columns:
-                fig.add_trace(go.Scatter(x=df_stock['Last Trading Date'], y=df_stock['Money Flow Ratio (20D)'], name='MF Ratio', line=dict(color='#AA00FF')), row=4, col=1)
+                fig.add_trace(go.Scatter(x=df_stock['Last Trading Date'], y=df_stock['Money Flow Ratio (20D)'], name='MF Ratio', line=dict(color='#8B5CF6')), row=4, col=1)
                 fig.add_hline(y=0, line_dash="dash", line_color="gray", row=4, col=1)
             
-            fig.update_layout(height=900, template='plotly_dark', margin=dict(t=30, b=10, l=10, r=10), hovermode="x unified", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+            # Update Layout for Light Theme
+            fig.update_layout(
+                height=900, 
+                template='plotly_white', 
+                margin=dict(t=30, b=10, l=10, r=10), 
+                hovermode="x unified", 
+                paper_bgcolor='rgba(0,0,0,0)', 
+                plot_bgcolor='rgba(0,0,0,0)',
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+            )
             st.plotly_chart(fig, use_container_width=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
@@ -493,20 +542,17 @@ with tab4:
     else: st.warning(msg)
     st.markdown('</div>', unsafe_allow_html=True)
 
-# --- TAB 5: NET FOREIGN FLOW (UPDATED LOGIC) ---
+# --- TAB 5: NET FOREIGN FLOW ---
 with tab5:
     st.markdown('<div class="css-card">', unsafe_allow_html=True)
-    st.markdown("#### 🌊 NET FOREIGN FLOW SUMMARY (ACCUMULATION & CONSISTENCY)")
-    st.caption("Saham dengan akumulasi asing bersih terbesar DAN frekuensi beli yang tinggi.")
-    
+    st.markdown("#### 🌊 NET FOREIGN FLOW SUMMARY")
     nff_summary = calculate_nff_summary_enhanced(df, pd.Timestamp(selected_date))
     
-    # Helper to show NFF Table
     def show_nff_table(data):
         st.dataframe(
             data.head(20), 
             hide_index=True, 
-            use_container_width=True,
+            use_container_width=True, 
             column_config={
                 "Close": st.column_config.NumberColumn(format="%d"),
                 "Total_Net_Buy": st.column_config.ProgressColumn("Net Buy (Rp)", format="Rp %.0f", min_value=0, max_value=data['Total_Net_Buy'].max()),
