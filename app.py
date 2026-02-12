@@ -28,108 +28,22 @@ st.set_page_config(
 # --- ✨ MODERN PREMIUM THEME (LIGHT MODE) ---
 st.markdown("""
 <style>
-    /* 1. Global Setup */
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
     
-    .stApp {
-        background-color: #F3F4F6; /* Light Gray Background */
-        color: #1F2937; /* Dark Gray Text */
-        font-family: 'Inter', sans-serif;
-    }
-
-    /* 2. Sidebar */
-    [data-testid="stSidebar"] {
-        background-color: #FFFFFF;
-        border-right: 1px solid #E5E7EB;
-    }
-    
-    /* 3. Cards (Container) */
-    .css-card {
-        background-color: #FFFFFF;
-        padding: 20px;
-        border-radius: 12px;
-        border: 1px solid #E5E7EB;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
-        margin-bottom: 20px;
-    }
-
-    /* 4. Metrics Styling */
-    div[data-testid="stMetric"] {
-        background-color: #FFFFFF;
-        padding: 10px;
-        border-radius: 8px;
-        # border: 1px solid #F3F4F6;
-    }
-    div[data-testid="stMetricLabel"] {
-        font-size: 14px !important;
-        color: #6B7280 !important; /* Cool Gray */
-        font-weight: 600 !important;
-    }
-    div[data-testid="stMetricValue"] {
-        font-size: 28px !important;
-        font-weight: 800 !important;
-        color: #111827 !important; /* Almost Black */
-    }
-    div[data-testid="stMetricDelta"] {
-        font-weight: 600;
-    }
-
-    /* 5. Dataframes */
-    div[data-testid="stDataFrame"] {
-        border: 1px solid #E5E7EB;
-        border-radius: 8px;
-        background-color: #FFFFFF;
-    }
-
-    /* 6. Tabs */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 8px;
-        background-color: transparent;
-    }
-    .stTabs [data-baseweb="tab"] {
-        background-color: #FFFFFF;
-        border-radius: 6px;
-        padding: 8px 16px;
-        font-weight: 600;
-        color: #6B7280;
-        border: 1px solid #E5E7EB;
-    }
-    .stTabs [aria-selected="true"] {
-        background-color: #2563EB !important; /* Royal Blue */
-        color: #FFFFFF !important;
-        border-color: #2563EB !important;
-    }
-
-    /* 7. Buttons */
-    div.stButton > button {
-        background-color: #2563EB;
-        color: white !important;
-        border-radius: 6px;
-        border: none;
-        font-weight: 600;
-        transition: all 0.2s;
-    }
-    div.stButton > button:hover {
-        background-color: #1D4ED8;
-        box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.3);
-    }
-
-    /* 8. Custom Headers */
-    .header-title { 
-        font-size: 36px; 
-        font-weight: 800; 
-        color: #111827; 
-        letter-spacing: -0.5px;
-        margin-bottom: 4px;
-    }
-    .header-subtitle { 
-        font-size: 16px; 
-        color: #6B7280; 
-        font-weight: 500;
-        margin-bottom: 32px; 
-    }
-    
-    /* 9. Utilities */
+    .stApp { background-color: #F3F4F6; color: #1F2937; font-family: 'Inter', sans-serif; }
+    [data-testid="stSidebar"] { background-color: #FFFFFF; border-right: 1px solid #E5E7EB; }
+    .css-card { background-color: #FFFFFF; padding: 20px; border-radius: 12px; border: 1px solid #E5E7EB; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); margin-bottom: 20px; }
+    div[data-testid="stMetric"] { background-color: #FFFFFF; padding: 10px; border-radius: 8px; }
+    div[data-testid="stMetricLabel"] { font-size: 14px !important; color: #6B7280 !important; font-weight: 600 !important; }
+    div[data-testid="stMetricValue"] { font-size: 28px !important; font-weight: 800 !important; color: #111827 !important; }
+    div[data-testid="stDataFrame"] { border: 1px solid #E5E7EB; border-radius: 8px; background-color: #FFFFFF; }
+    .stTabs [data-baseweb="tab-list"] { gap: 8px; background-color: transparent; }
+    .stTabs [data-baseweb="tab"] { background-color: #FFFFFF; border-radius: 6px; padding: 8px 16px; font-weight: 600; color: #6B7280; border: 1px solid #E5E7EB; }
+    .stTabs [aria-selected="true"] { background-color: #2563EB !important; color: #FFFFFF !important; border-color: #2563EB !important; }
+    div.stButton > button { background-color: #2563EB; color: white !important; border-radius: 6px; border: none; font-weight: 600; transition: all 0.2s; }
+    div.stButton > button:hover { background-color: #1D4ED8; box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.3); }
+    .header-title { font-size: 36px; font-weight: 800; color: #111827; letter-spacing: -0.5px; margin-bottom: 4px; }
+    .header-subtitle { font-size: 16px; color: #6B7280; font-weight: 500; margin-bottom: 32px; }
     hr { margin: 2em 0; border-color: #E5E7EB; }
 </style>
 """, unsafe_allow_html=True)
@@ -139,7 +53,7 @@ FOLDER_ID = "1hX2jwUrAgi4Fr8xkcFWjCW6vbk6lsIlP"
 FILE_NAME = "Kompilasi_Data_1Tahun.csv"
 
 # ==============================================================================
-# 📦 3) FUNGSI MEMUAT DATA (FIXED ROBUST)
+# 📦 3) FUNGSI MEMUAT DATA (PATCHED: MONEY FLOW VALUE FIX)
 # ==============================================================================
 def get_gdrive_service():
     try:
@@ -175,32 +89,33 @@ def load_data():
         df.columns = df.columns.str.strip()
         df['Last Trading Date'] = pd.to_datetime(df['Last Trading Date'], errors='coerce')
         
-        # Numeric Conversion
+        # 1. Konversi Numerik Dasar
         cols_to_numeric = [
             'High', 'Low', 'Close', 'Volume', 'Value', 'Foreign Buy', 'Foreign Sell', 'Bid Volume', 'Offer Volume', 
             'Change', 'Open Price', 'Listed Shares', 'Change %', 'Typical Price', 'Net Foreign Flow', 'Money Flow Value', 
             'Free Float', 'Volume Spike (x)', 'Money Flow Ratio (20D)'
         ]
+        
+        # 2. Loop Konversi Aman
         for col in cols_to_numeric:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col].astype(str).str.strip().str.replace(r'[,\sRp\%]', '', regex=True), errors='coerce').fillna(0)
-        
-        # --- FIX: LOGIKA UNUSUAL VOLUME ---
-        # Kita buat kolom ini JIKA belum ada, atau bersihkan JIKA sudah ada
+            else:
+                # [FIX CRITICAL] Jika kolom tidak ada di CSV, Buat dengan nilai 0
+                # Ini mencegah KeyError di Chart/Metric nanti
+                df[col] = 0.0
+
+        # 3. Logika Tambahan
         if 'Unusual Volume' not in df.columns:
-            # Skenario 1: Ambil dari 'Volume Spike (x)' > 2
             if 'Volume Spike (x)' in df.columns:
                 df['Unusual Volume'] = df['Volume Spike (x)'] > 2.0
-            # Skenario 2: Ambil dari 'Big_Player_Anomaly'
             elif 'Big_Player_Anomaly' in df.columns:
                 df['Unusual Volume'] = df['Big_Player_Anomaly'].astype(str).str.strip().str.lower() == 'true'
             else:
-                df['Unusual Volume'] = False # Default False
+                df['Unusual Volume'] = False
         else:
-            # Jika kolom sudah ada, bersihkan formatnya
             df['Unusual Volume'] = df['Unusual Volume'].astype(str).str.strip().str.lower().isin(['spike volume signifikan', 'true', '1'])
         
-        # --- FIX: LOGIKA FINAL SIGNAL & SECTOR ---
         if 'Final Signal' in df.columns:
             df['Final Signal'] = df['Final Signal'].astype(str).str.strip()
         else:
@@ -213,12 +128,11 @@ def load_data():
 
         df = df.dropna(subset=['Last Trading Date', 'Stock Code'])
         
+        # 4. Hitung NFF (Rp) jika belum ada
         if 'NFF (Rp)' not in df.columns:
-            if 'Net Foreign Flow' in df.columns:
-                price_col = 'Typical Price' if 'Typical Price' in df.columns else 'Close'
-                df['NFF (Rp)'] = df['Net Foreign Flow'] * df[price_col]
-            else:
-                df['NFF (Rp)'] = 0
+            # Gunakan kolom yang sudah pasti ada (karena di-force create di atas)
+            price_col = 'Typical Price' if df['Typical Price'].sum() > 0 else 'Close'
+            df['NFF (Rp)'] = df['Net Foreign Flow'] * df[price_col]
             
         return df, "Market Data Synced", "success"
     except Exception as e: return pd.DataFrame(), f"❌ Load Error: {e}", "error"
@@ -449,7 +363,6 @@ with tab1:
     c1, c2, c3 = st.columns(3)
     c1.metric("ACTIVE STOCKS", f"{len(df_day):,.0f}")
     
-    # Safely get unusual volume sum
     unusual_sum = df_day['Unusual Volume'].sum() if 'Unusual Volume' in df_day.columns else 0
     c2.metric("UNUSUAL VOLUME", f"{unusual_sum:,.0f}")
     
@@ -484,7 +397,10 @@ with tab2:
             c1, c2, c3, c4 = st.columns(4)
             c1.metric("CLOSE", f"Rp {lr['Close']:,.0f}")
             c2.metric("NFF (Rp)", f"Rp {lr['NFF (Rp)']:,.0f}")
-            c3.metric("MFV (Rp)", f"Rp {lr['Money Flow Value']:,.0f}")
+            
+            # [FIXED] Safely get Money Flow Value using .get()
+            mfv_val = lr.get('Money Flow Value', 0)
+            c3.metric("MFV (Rp)", f"Rp {mfv_val:,.0f}")
             
             raw_mf = lr.get('Money Flow Ratio (20D)', 0)
             try: mf_val = float(raw_mf)
@@ -497,8 +413,10 @@ with tab2:
             colors_nff = np.where(df_stock['NFF (Rp)'] >= 0, '#10B981', '#EF4444')
             fig.add_trace(go.Bar(x=df_stock['Last Trading Date'], y=df_stock['NFF (Rp)'], name='NFF', marker_color=colors_nff), row=1, col=1)
             
-            colors_mfv = np.where(df_stock['Money Flow Value'] >= 0, '#3B82F6', '#F59E0B')
-            fig.add_trace(go.Bar(x=df_stock['Last Trading Date'], y=df_stock['Money Flow Value'], name='MFV', marker_color=colors_mfv), row=2, col=1)
+            # [FIXED] Use .get for dataframe column access as well
+            mfv_series = df_stock['Money Flow Value'] if 'Money Flow Value' in df_stock.columns else pd.Series(0, index=df_stock.index)
+            colors_mfv = np.where(mfv_series >= 0, '#3B82F6', '#F59E0B')
+            fig.add_trace(go.Bar(x=df_stock['Last Trading Date'], y=mfv_series, name='MFV', marker_color=colors_mfv), row=2, col=1)
             
             fig.add_trace(go.Bar(x=df_stock['Last Trading Date'], y=df_stock['Volume'], name='Volume', marker_color='#9CA3AF'), row=3, col=1)
             
